@@ -1,2 +1,146 @@
-const SUPABASE_URL = "YOUR_SUPABASE_URL";
-   const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เข้าสู่ระบบ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', 'Sarabun', sans-serif;
+    background: #eef1f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 28px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  h1 { font-size: 20px; margin: 0 0 6px; color: #1c2438; text-align: center; }
+  .sub { text-align: center; color: #6b7386; font-size: 13px; margin-bottom: 24px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #333; margin: 14px 0 6px; }
+  input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button {
+    width: 100%;
+    margin-top: 22px;
+    padding: 12px;
+    background: #2b8ae0;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #2276c4; }
+  button:disabled { background: #ccc; cursor: not-allowed; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; }
+  .msg.error { color: #e0526b; }
+  .msg.success { color: #3ecf8e; }
+  .link { text-align: center; margin-top: 18px; font-size: 13px; }
+  .link a { color: #2b8ae0; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>เข้าสู่ระบบ</h1>
+  <div class="sub">ระบบดูแลผู้สูงอายุ</div>
+
+  <form id="loginForm">
+    <label>อีเมล</label>
+    <input type="email" id="email" required>
+
+    <label>รหัสผ่าน</label>
+    <input type="password" id="password" required>
+
+    <button type="submit" id="submitBtn">เข้าสู่ระบบ</button>
+    <div class="msg" id="msg"></div>
+  </form>
+
+  <div class="link">ยังไม่มีบัญชี? <a href="register.html">สมัครสมาชิก</a></div>
+</div>
+
+<script>
+  // TODO: แทนที่ด้วยค่าจาก Supabase Settings > API (ค่าเดียวกับใน register.html)
+  const SUPABASE_URL = "YOUR_SUPABASE_URL";
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const form = document.getElementById('loginForm');
+  const msg = document.getElementById('msg');
+  const submitBtn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    submitBtn.textContent = "กำลังเข้าสู่ระบบ...";
+    msg.textContent = "";
+    msg.className = "msg";
+
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+
+    // 1) เข้าสู่ระบบผ่าน Supabase Auth
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      msg.textContent = "เข้าสู่ระบบไม่สำเร็จ: " + error.message;
+      msg.classList.add("error");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "เข้าสู่ระบบ";
+      return;
+    }
+
+    // 2) ดึง role จากตาราง profiles เพื่อ redirect ให้ถูกหน้า
+    const userId = data.user.id;
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, full_name')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      msg.textContent = "เข้าสู่ระบบสำเร็จ แต่ไม่พบข้อมูลโปรไฟล์";
+      msg.classList.add("error");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "เข้าสู่ระบบ";
+      return;
+    }
+
+    msg.textContent = "เข้าสู่ระบบสำเร็จ! กำลังพาไป...";
+    msg.classList.add("success");
+
+    // 3) Redirect ตาม role (สร้างหน้าเหล่านี้ในเฟสถัดไป)
+    setTimeout(() => {
+      if (profile.role === 'elderly') {
+        window.location.href = "elderly-home.html";
+      } else if (profile.role === 'caregiver') {
+        window.location.href = "caregiver-dashboard.html";
+      } else if (profile.role === 'medical') {
+        window.location.href = "medical-dashboard.html";
+      } else {
+        window.location.href = "index.html";
+      }
+    }, 1000);
+  });
+</script>
+
+</body>
+</html>
