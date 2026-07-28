@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>หน้าหลัก - ผู้สูงอายุ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', 'Sarabun', sans-serif;
+    background: #eef1f5;
+    min-height: 100vh;
+  }
+  header {
+    background: #2b8ae0;
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  .logout {
+    background: rgba(255,255,255,0.2);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .logout:hover { background: rgba(255,255,255,0.3); }
+  main { max-width: 900px; margin: 0 auto; padding: 24px; }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 24px 28px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
+  .row { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
+  .row:last-child { border-bottom: none; }
+  .row .k { width: 140px; color: #6b7386; }
+  .row .v { color: #1c2438; font-weight: 600; }
+  .todo { color: #6b7386; font-size: 14px; line-height: 1.8; }
+  .loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+</style>
+</head>
+<body>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>ระบบดูแลผู้สูงอายุ</h1>
+    <button class="logout" id="logoutBtn">ออกจากระบบ</button>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>ข้อมูลผู้ใช้</h2>
+      <div class="row"><div class="k">ชื่อ-นามสกุล</div><div class="v" id="fullName">-</div></div>
+      <div class="row"><div class="k">อีเมล</div><div class="v" id="email">-</div></div>
+      <div class="row"><div class="k">บทบาท</div><div class="v" id="role">-</div></div>
+    </div>
+
+    <div class="card">
+      <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
+      <div class="todo">
+        • เตือนกินยา / ตารางยาประจำวัน<br>
+        • บันทึกสัญญาณชีพ (ความดัน ชีพจร น้ำตาล)<br>
+        • ปุ่มขอความช่วยเหลือฉุกเฉิน<br>
+        • นัดหมายแพทย์
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="loading" id="loading">กำลังโหลด...</div>
+
+<script>
+  const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-";
+
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  (async () => {
+    // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
+      window.location.replace("login.html");
+      return;
+    }
+
+    // 2) ดึงโปรไฟล์
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('full_name, role')
+      .eq('id', session.user.id)
+      .single();
+
+    // 3) กันไม่ให้ role อื่นเข้าหน้านี้
+    if (profile && profile.role !== 'elderly') {
+      const map = {
+        caregiver: "caregiver-dashboard.html",
+        medical: "medical-dashboard.html"
+      };
+      window.location.replace(map[profile.role] || "login.html");
+      return;
+    }
+
+    document.getElementById('fullName').textContent = (profile && profile.full_name) || "-";
+    document.getElementById('email').textContent = session.user.email;
+    document.getElementById('role').textContent = "ผู้สูงอายุ / สมาชิกในครอบครัว";
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+  })();
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+    window.location.replace("login.html");
+  });
+</script>
+
+</body>
+</html>

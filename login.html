@@ -35,6 +35,24 @@
     border-radius: 8px;
     font-size: 14px;
   }
+  input:focus { outline: 2px solid #2b8ae0; outline-offset: -1px; border-color: transparent; }
+  .pw-wrap { position: relative; }
+  .pw-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    width: auto;
+    margin: 0;
+    padding: 4px 6px;
+    font-size: 12px;
+    color: #6b7386;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pw-toggle:hover { background: none; color: #2b8ae0; }
   button {
     width: 100%;
     margin-top: 22px;
@@ -49,25 +67,32 @@
   }
   button:hover { background: #2276c4; }
   button:disabled { background: #ccc; cursor: not-allowed; }
-  .msg { margin-top: 14px; font-size: 13px; text-align: center; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
   .msg.error { color: #e0526b; }
-  .msg.success { color: #3ecf8e; }
+  .msg.success { color: #2fa876; }
   .link { text-align: center; margin-top: 18px; font-size: 13px; }
   .link a { color: #2b8ae0; text-decoration: none; }
+  .link a:hover { text-decoration: underline; }
+  .boot { text-align: center; padding: 60px 20px; color: #6b7386; font-size: 14px; }
 </style>
 </head>
 <body>
 
-<div class="card">
+<div class="boot" id="boot">กำลังตรวจสอบสถานะ...</div>
+
+<div class="card" id="card" style="display:none">
   <h1>เข้าสู่ระบบ</h1>
   <div class="sub">ระบบดูแลผู้สูงอายุ</div>
 
-  <form id="loginForm">
-    <label>อีเมล</label>
-    <input type="email" id="email" required>
+  <form id="loginForm" novalidate>
+    <label for="email">อีเมล</label>
+    <input type="email" id="email" autocomplete="email" required>
 
-    <label>รหัสผ่าน</label>
-    <input type="password" id="password" required>
+    <label for="password">รหัสผ่าน</label>
+    <div class="pw-wrap">
+      <input type="password" id="password" autocomplete="current-password" required>
+      <button type="button" class="pw-toggle" id="pwToggle">แสดง</button>
+    </div>
 
     <button type="submit" id="submitBtn">เข้าสู่ระบบ</button>
     <div class="msg" id="msg"></div>
@@ -77,68 +102,120 @@
 </div>
 
 <script>
-  // TODO: แทนที่ด้วยค่าจาก Supabase Settings > API (ค่าเดียวกับใน register.html)
   const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-";
 
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  const form = document.getElementById('loginForm');
-  const msg = document.getElementById('msg');
+  const HOME_BY_ROLE = {
+    elderly:   "elderly-home.html",
+    caregiver: "caregiver-dashboard.html",
+    medical:   "medical-dashboard.html"
+  };
+
+  const boot      = document.getElementById('boot');
+  const card      = document.getElementById('card');
+  const form      = document.getElementById('loginForm');
+  const msg       = document.getElementById('msg');
   const submitBtn = document.getElementById('submitBtn');
+  const pwToggle  = document.getElementById('pwToggle');
+  const pwInput   = document.getElementById('password');
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    submitBtn.disabled = true;
-    submitBtn.textContent = "กำลังเข้าสู่ระบบ...";
-    msg.textContent = "";
-    msg.className = "msg";
+  function showMsg(text, type) {
+    msg.textContent = text;
+    msg.className = "msg" + (type ? " " + type : "");
+  }
 
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
+  function setLoading(on) {
+    submitBtn.disabled = on;
+    submitBtn.textContent = on ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ";
+  }
 
-    // 1) เข้าสู่ระบบผ่าน Supabase Auth
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  function showForm() {
+    boot.style.display = 'none';
+    card.style.display = 'block';
+    document.getElementById('email').focus();
+  }
 
-    if (error) {
-      msg.textContent = "เข้าสู่ระบบไม่สำเร็จ: " + error.message;
-      msg.classList.add("error");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "เข้าสู่ระบบ";
-      return;
-    }
+  // แปลข้อความ error ของ Supabase เป็นภาษาไทยที่เข้าใจง่าย
+  function translateError(message) {
+    const m = (message || "").toLowerCase();
+    if (m.includes("invalid login credentials"))
+      return "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+    if (m.includes("email not confirmed"))
+      return "ยังไม่ได้ยืนยันอีเมล กรุณาตรวจกล่องจดหมายก่อน";
+    if (m.includes("rate limit") || m.includes("too many"))
+      return "พยายามเข้าสู่ระบบถี่เกินไป กรุณารอสักครู่";
+    return message || "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+  }
 
-    // 2) ดึง role จากตาราง profiles เพื่อ redirect ให้ถูกหน้า
-    const userId = data.user.id;
-    const { data: profile, error: profileError } = await supabaseClient
+  // พาไปหน้าตาม role ที่ดึงมาจากตาราง profiles
+  async function goToHome(userId) {
+    const { data: profile, error } = await supabaseClient
       .from('profiles')
-      .select('role, full_name')
+      .select('role')
       .eq('id', userId)
       .single();
 
-    if (profileError || !profile) {
-      msg.textContent = "เข้าสู่ระบบสำเร็จ แต่ไม่พบข้อมูลโปรไฟล์";
-      msg.classList.add("error");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "เข้าสู่ระบบ";
-      return;
-    }
+    if (error || !profile) return null;
+    const target = HOME_BY_ROLE[profile.role];
+    if (!target) return null;
+    window.location.replace(target);
+    return profile.role;
+  }
 
-    msg.textContent = "เข้าสู่ระบบสำเร็จ! กำลังพาไป...";
-    msg.classList.add("success");
+  // ถ้าล็อกอินค้างอยู่แล้ว ข้ามหน้านี้ไปเลย ไม่ต้องกรอกซ้ำ
+  (async () => {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (session && await goToHome(session.user.id)) return;
+    } catch (_) { /* เช็คไม่ได้ก็แสดงฟอร์มตามปกติ */ }
+    showForm();
+  })();
 
-    // 3) Redirect ตาม role (สร้างหน้าเหล่านี้ในเฟสถัดไป)
-    setTimeout(() => {
-      if (profile.role === 'elderly') {
-        window.location.href = "elderly-home.html";
-      } else if (profile.role === 'caregiver') {
-        window.location.href = "caregiver-dashboard.html";
-      } else if (profile.role === 'medical') {
-        window.location.href = "medical-dashboard.html";
-      } else {
-        window.location.href = "index.html";
+  pwToggle.addEventListener('click', () => {
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    pwToggle.textContent = show ? 'ซ่อน' : 'แสดง';
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const email    = document.getElementById('email').value.trim().toLowerCase();
+    const password = document.getElementById('password').value;
+
+    if (!email.includes('@')) return showMsg("กรุณากรอกอีเมลให้ถูกต้อง", "error");
+    if (!password)            return showMsg("กรุณากรอกรหัสผ่าน", "error");
+
+    setLoading(true);
+    showMsg("");
+
+    try {
+      // 1) เข้าสู่ระบบผ่าน Supabase Auth
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        showMsg(translateError(error.message), "error");
+        setLoading(false);
+        return;
       }
-    }, 1000);
+
+      // 2) ดึง role จากตาราง profiles แล้ว redirect ให้ถูกหน้า
+      showMsg("เข้าสู่ระบบสำเร็จ! กำลังพาไป...", "success");
+      const role = await goToHome(data.user.id);
+
+      if (!role) {
+        showMsg("เข้าสู่ระบบสำเร็จ แต่ไม่พบข้อมูลโปรไฟล์ กรุณาติดต่อผู้ดูแลระบบ", "error");
+        setLoading(false);
+      }
+      // ถ้าเจอ role แล้วจะเปลี่ยนหน้าเอง ไม่ต้องเปิดปุ่มกลับ
+
+    } catch (err) {
+      showMsg("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่", "error");
+      console.error(err);
+      setLoading(false);
+    }
   });
 </script>
 

@@ -35,6 +35,25 @@
     border-radius: 8px;
     font-size: 14px;
   }
+  input:focus, select:focus { outline: 2px solid #d97757; outline-offset: -1px; border-color: transparent; }
+  .hint { font-size: 12px; color: #98a0b0; margin-top: 5px; }
+  .pw-wrap { position: relative; }
+  .pw-toggle {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    width: auto;
+    margin: 0;
+    padding: 4px 6px;
+    font-size: 12px;
+    color: #6b7386;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .pw-toggle:hover { background: none; color: #d97757; }
   button {
     width: 100%;
     margin-top: 22px;
@@ -49,11 +68,12 @@
   }
   button:hover { background: #c8663f; }
   button:disabled { background: #ccc; cursor: not-allowed; }
-  .msg { margin-top: 14px; font-size: 13px; text-align: center; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; min-height: 18px; }
   .msg.error { color: #e0526b; }
-  .msg.success { color: #3ecf8e; }
+  .msg.success { color: #2fa876; }
   .link { text-align: center; margin-top: 18px; font-size: 13px; }
   .link a { color: #2b8ae0; text-decoration: none; }
+  .link a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -62,17 +82,24 @@
   <h1>สมัครสมาชิก</h1>
   <div class="sub">ระบบดูแลผู้สูงอายุ</div>
 
-  <form id="registerForm">
-    <label>ชื่อ-นามสกุล</label>
-    <input type="text" id="fullName" required>
+  <form id="registerForm" novalidate>
+    <label for="fullName">ชื่อ-นามสกุล</label>
+    <input type="text" id="fullName" autocomplete="name" required>
 
-    <label>อีเมล</label>
-    <input type="email" id="email" required>
+    <label for="email">อีเมล</label>
+    <input type="email" id="email" autocomplete="email" required>
 
-    <label>รหัสผ่าน</label>
-    <input type="password" id="password" required minlength="6">
+    <label for="password">รหัสผ่าน</label>
+    <div class="pw-wrap">
+      <input type="password" id="password" autocomplete="new-password" required minlength="6">
+      <button type="button" class="pw-toggle" id="pwToggle">แสดง</button>
+    </div>
+    <div class="hint">อย่างน้อย 6 ตัวอักษร</div>
 
-    <label>บทบาท</label>
+    <label for="password2">ยืนยันรหัสผ่าน</label>
+    <input type="password" id="password2" autocomplete="new-password" required>
+
+    <label for="role">บทบาท</label>
     <select id="role" required>
       <option value="">-- เลือกบทบาท --</option>
       <option value="elderly">ผู้สูงอายุ / สมาชิกในครอบครัว</option>
@@ -88,55 +115,127 @@
 </div>
 
 <script>
-  // TODO: แทนที่ด้วยค่าจาก Supabase Settings > API
   const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co";
   const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-";
 
- const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  const form = document.getElementById('registerForm');
-  const msg = document.getElementById('msg');
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const HOME_BY_ROLE = {
+    elderly:   "elderly-home.html",
+    caregiver: "caregiver-dashboard.html",
+    medical:   "medical-dashboard.html"
+  };
+
+  const form      = document.getElementById('registerForm');
+  const msg       = document.getElementById('msg');
   const submitBtn = document.getElementById('submitBtn');
+  const pwToggle  = document.getElementById('pwToggle');
+  const pwInput   = document.getElementById('password');
+
+  function showMsg(text, type) {
+    msg.textContent = text;
+    msg.className = "msg" + (type ? " " + type : "");
+  }
+
+  function setLoading(on) {
+    submitBtn.disabled = on;
+    submitBtn.textContent = on ? "กำลังสมัคร..." : "สมัครสมาชิก";
+  }
+
+  // แปลข้อความ error ของ Supabase เป็นภาษาไทยที่เข้าใจง่าย
+  function translateError(message) {
+    const m = (message || "").toLowerCase();
+    if (m.includes("already registered") || m.includes("already been registered"))
+      return "อีเมลนี้ถูกใช้สมัครไปแล้ว ลองเข้าสู่ระบบแทน";
+    if (m.includes("rate limit"))
+      return "ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่";
+    if (m.includes("password") && m.includes("least"))
+      return "รหัสผ่านสั้นเกินไป ต้องมีอย่างน้อย 6 ตัวอักษร";
+    if (m.includes("invalid") && m.includes("email"))
+      return "รูปแบบอีเมลไม่ถูกต้อง";
+    if (m.includes("signups") && m.includes("disabled"))
+      return "ระบบปิดรับสมัครสมาชิกอยู่ กรุณาติดต่อผู้ดูแลระบบ";
+    return message || "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ";
+  }
+
+  // ถ้าล็อกอินค้างอยู่แล้ว ไม่ต้องให้สมัครซ้ำ พาไปหน้าของ role นั้นเลย
+  (async () => {
+    try {
+      const { data: { session } } = await supabaseClient.auth.getSession();
+      if (!session) return;
+      const { data: profile } = await supabaseClient
+        .from('profiles').select('role').eq('id', session.user.id).single();
+      window.location.replace(HOME_BY_ROLE[profile && profile.role] || "login.html");
+    } catch (_) { /* ถ้าเช็คไม่ได้ ก็ปล่อยให้อยู่หน้าสมัครตามปกติ */ }
+  })();
+
+  pwToggle.addEventListener('click', () => {
+    const show = pwInput.type === 'password';
+    pwInput.type = show ? 'text' : 'password';
+    pwToggle.textContent = show ? 'ซ่อน' : 'แสดง';
+  });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    submitBtn.disabled = true;
-    submitBtn.textContent = "กำลังสมัคร...";
-    msg.textContent = "";
-    msg.className = "msg";
 
-    const fullName = document.getElementById('fullName').value;
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
+    const fullName  = document.getElementById('fullName').value.trim();
+    const email     = document.getElementById('email').value.trim().toLowerCase();
+    const password  = document.getElementById('password').value;
+    const password2 = document.getElementById('password2').value;
+    const role      = document.getElementById('role').value;
 
-    // 1) สมัครสมาชิกผ่าน Supabase Auth
-    const { data, error } = await supabaseClient.auth.signUp({ email, password });
+    // ตรวจข้อมูลฝั่งหน้าเว็บก่อน จะได้ไม่ยิงไป server ให้เปลืองโควตา
+    if (!fullName)              return showMsg("กรุณากรอกชื่อ-นามสกุล", "error");
+    if (!email.includes('@'))   return showMsg("กรุณากรอกอีเมลให้ถูกต้อง", "error");
+    if (password.length < 6)    return showMsg("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "error");
+    if (password !== password2) return showMsg("รหัสผ่านทั้งสองช่องไม่ตรงกัน", "error");
+    if (!role)                  return showMsg("กรุณาเลือกบทบาท", "error");
 
-    if (error) {
-      msg.textContent = "เกิดข้อผิดพลาด: " + error.message;
-      msg.classList.add("error");
-      submitBtn.disabled = false;
-      submitBtn.textContent = "สมัครสมาชิก";
-      return;
-    }
+    setLoading(true);
+    showMsg("");
 
-    // 2) บันทึกข้อมูลเพิ่มเติมลงตาราง profiles
-    const userId = data.user.id;
-    const { error: profileError } = await supabaseClient
-      .from('profiles')
-      .insert([{ id: userId, full_name: fullName, role: role }]);
+    try {
+      // 1) สมัครสมาชิกผ่าน Supabase Auth
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { full_name: fullName, role: role } }
+      });
 
-    if (profileError) {
-      msg.textContent = "สมัครสำเร็จ แต่บันทึกโปรไฟล์ไม่สำเร็จ: " + profileError.message;
-      msg.classList.add("error");
-    } else {
-      msg.textContent = "สมัครสมาชิกสำเร็จ! กำลังพาไปหน้าเข้าสู่ระบบ...";
-      msg.classList.add("success");
+      if (error) {
+        showMsg("สมัครไม่สำเร็จ: " + translateError(error.message), "error");
+        setLoading(false);
+        return;
+      }
+
+      // กันกรณีเปิด Confirm email แล้ว Supabase ไม่คืน user กลับมา
+      if (!data.user) {
+        showMsg("สมัครสำเร็จ! กรุณาตรวจอีเมลเพื่อยืนยันตัวตนก่อนเข้าสู่ระบบ", "success");
+        setLoading(false);
+        return;
+      }
+
+      // 2) บันทึกข้อมูลเพิ่มเติมลงตาราง profiles
+      const { error: profileError } = await supabaseClient
+        .from('profiles')
+        .insert([{ id: data.user.id, full_name: fullName, role: role }]);
+
+      // 23505 = มีแถวนี้อยู่แล้ว (เช่นถ้าวันหลังไปเพิ่ม trigger) ไม่ถือว่าผิดพลาด
+      if (profileError && profileError.code !== '23505') {
+        showMsg("สมัครสำเร็จ แต่บันทึกโปรไฟล์ไม่สำเร็จ: " + profileError.message, "error");
+        setLoading(false);
+        return;
+      }
+
+      showMsg("สมัครสมาชิกสำเร็จ! กำลังพาไปหน้าเข้าสู่ระบบ...", "success");
+      // ไม่เปิดปุ่มกลับ เพราะกำลังจะเปลี่ยนหน้า กันกดซ้ำ
       setTimeout(() => { window.location.href = "login.html"; }, 1500);
-    }
 
-    submitBtn.disabled = false;
-    submitBtn.textContent = "สมัครสมาชิก";
+    } catch (err) {
+      showMsg("เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่", "error");
+      console.error(err);
+      setLoading(false);
+    }
   });
 </script>
 
