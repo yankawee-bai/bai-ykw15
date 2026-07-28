@@ -1,20 +1,145 @@
-create table profiles (
-  id uuid references auth.users on delete cascade primary key,
-  full_name text,
-  role text check (role in ('elderly', 'caregiver', 'medical')),
-  created_at timestamp default now()
-);
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สมัครสมาชิก</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', 'Sarabun', sans-serif;
+    background: #eef1f5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px 28px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  }
+  h1 { font-size: 20px; margin: 0 0 6px; color: #1c2438; text-align: center; }
+  .sub { text-align: center; color: #6b7386; font-size: 13px; margin-bottom: 24px; }
+  label { display: block; font-size: 13px; font-weight: 600; color: #333; margin: 14px 0 6px; }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button {
+    width: 100%;
+    margin-top: 22px;
+    padding: 12px;
+    background: #d97757;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: #c8663f; }
+  button:disabled { background: #ccc; cursor: not-allowed; }
+  .msg { margin-top: 14px; font-size: 13px; text-align: center; }
+  .msg.error { color: #e0526b; }
+  .msg.success { color: #3ecf8e; }
+  .link { text-align: center; margin-top: 18px; font-size: 13px; }
+  .link a { color: #2b8ae0; text-decoration: none; }
+</style>
+</head>
+<body>
 
-alter table profiles enable row level security;
+<div class="card">
+  <h1>สมัครสมาชิก</h1>
+  <div class="sub">ระบบดูแลผู้สูงอายุ</div>
 
-create policy "Users can view own profile"
-  on profiles for select
-  using (auth.uid() = id);
+  <form id="registerForm">
+    <label>ชื่อ-นามสกุล</label>
+    <input type="text" id="fullName" required>
 
-create policy "Users can insert own profile"
-  on profiles for insert
-  with check (auth.uid() = id);
+    <label>อีเมล</label>
+    <input type="email" id="email" required>
 
-create policy "Users can update own profile"
-  on profiles for update
-  using (auth.uid() = id);
+    <label>รหัสผ่าน</label>
+    <input type="password" id="password" required minlength="6">
+
+    <label>บทบาท</label>
+    <select id="role" required>
+      <option value="">-- เลือกบทบาท --</option>
+      <option value="elderly">ผู้สูงอายุ / สมาชิกในครอบครัว</option>
+      <option value="caregiver">ผู้ดูแล</option>
+      <option value="medical">บุคลากรทางการแพทย์</option>
+    </select>
+
+    <button type="submit" id="submitBtn">สมัครสมาชิก</button>
+    <div class="msg" id="msg"></div>
+  </form>
+
+  <div class="link">มีบัญชีอยู่แล้ว? <a href="login.html">เข้าสู่ระบบ</a></div>
+</div>
+
+<script>
+  // TODO: แทนที่ด้วยค่าจาก Supabase Settings > API
+  const SUPABASE_URL = "YOUR_SUPABASE_URL";
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const form = document.getElementById('registerForm');
+  const msg = document.getElementById('msg');
+  const submitBtn = document.getElementById('submitBtn');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    submitBtn.textContent = "กำลังสมัคร...";
+    msg.textContent = "";
+    msg.className = "msg";
+
+    const fullName = document.getElementById('fullName').value;
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const role = document.getElementById('role').value;
+
+    // 1) สมัครสมาชิกผ่าน Supabase Auth
+    const { data, error } = await supabase.auth.signUp({ email, password });
+
+    if (error) {
+      msg.textContent = "เกิดข้อผิดพลาด: " + error.message;
+      msg.classList.add("error");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "สมัครสมาชิก";
+      return;
+    }
+
+    // 2) บันทึกข้อมูลเพิ่มเติมลงตาราง profiles
+    const userId = data.user.id;
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .insert([{ id: userId, full_name: fullName, role: role }]);
+
+    if (profileError) {
+      msg.textContent = "สมัครสำเร็จ แต่บันทึกโปรไฟล์ไม่สำเร็จ: " + profileError.message;
+      msg.classList.add("error");
+    } else {
+      msg.textContent = "สมัครสมาชิกสำเร็จ! กำลังพาไปหน้าเข้าสู่ระบบ...";
+      msg.classList.add("success");
+      setTimeout(() => { window.location.href = "login.html"; }, 1500);
+    }
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = "สมัครสมาชิก";
+  });
+</script>
+
+</body>
+</html>
