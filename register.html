@@ -110,7 +110,7 @@
     const role = document.getElementById('role').value;
 
     // 1) สมัครสมาชิกผ่าน Supabase Auth
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabaseClient.auth.signUp({ email, password });
 
     if (error) {
       msg.textContent = "เกิดข้อผิดพลาด: " + error.message;
@@ -122,7 +122,7 @@
 
     // 2) บันทึกข้อมูลเพิ่มเติมลงตาราง profiles
     const userId = data.user.id;
-    const { error: profileError } = await supabase
+    const { error: profileError } = await supabaseClient
       .from('profiles')
       .insert([{ id: userId, full_name: fullName, role: role }]);
 
