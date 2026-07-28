@@ -92,8 +92,7 @@
   const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co/rest/v1/";
   const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-"
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const form = document.getElementById('registerForm');
   const msg = document.getElementById('msg');
   const submitBtn = document.getElementById('submitBtn');
