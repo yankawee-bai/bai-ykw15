@@ -81,7 +81,7 @@
   const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co/rest/v1/";
   const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-";
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   const form = document.getElementById('loginForm');
   const msg = document.getElementById('msg');
@@ -98,7 +98,7 @@
     const password = document.getElementById('password').value;
 
     // 1) เข้าสู่ระบบผ่าน Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
     if (error) {
       msg.textContent = "เข้าสู่ระบบไม่สำเร็จ: " + error.message;
@@ -110,7 +110,7 @@
 
     // 2) ดึง role จากตาราง profiles เพื่อ redirect ให้ถูกหน้า
     const userId = data.user.id;
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
       .select('role, full_name')
       .eq('id', userId)
