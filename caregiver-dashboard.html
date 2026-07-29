@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>แดชบอร์ด - ผู้ดูแล</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -80,10 +81,7 @@
 <div class="loading" id="loading">กำลังโหลด...</div>
 
 <script>
-  const SUPABASE_URL = "https://vboyxvlhztdrtswfuhzw.supabase.co";
-  const SUPABASE_ANON_KEY = "sb_publishable_Wa3BSlPrINmpC9Xgw0EEcg_uGb319o-";
-
-  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+ 
 
   (async () => {
     // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login

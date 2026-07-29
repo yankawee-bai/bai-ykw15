@@ -9,12 +9,12 @@
 
 ## เทคโนโลยีที่ใช้
 
-| ส่วน | ใช้อะไร |
-|---|---|
-| หน้าเว็บ | HTML + CSS + JavaScript ล้วน ไม่มี framework ไม่ต้อง build |
-| Auth + Database | Supabase (แผนฟรี) |
-| Supabase SDK | `@supabase/supabase-js@2` โหลดจาก CDN |
-| Deploy | GitHub Pages |
+| ส่วน            | ใช้อะไร                                                    |
+| --------------- | ---------------------------------------------------------- |
+| หน้าเว็บ        | HTML + CSS + JavaScript ล้วน ไม่มี framework ไม่ต้อง build |
+| Auth + Database | Supabase (แผนฟรี)                                          |
+| Supabase SDK    | `@supabase/supabase-js@2` โหลดจาก CDN                      |
+| Deploy          | GitHub Pages                                               |
 
 ไม่ต้องติดตั้ง npm หรือรัน build ใด ๆ เปิดไฟล์ผ่าน local server ก็ทำงานได้เลย
 
@@ -22,15 +22,26 @@
 
 ## ไฟล์ในโปรเจกต์
 
-| ไฟล์ | หน้าที่ |
-|---|---|
-| `register.html` | สมัครสมาชิก เลือกบทบาท แล้วบันทึกลงตาราง `profiles` |
-| `login.html` | เข้าสู่ระบบ ดึง role แล้วพาไปหน้าตามบทบาท |
-| `elderly-home.html` | หน้าหลักของผู้สูงอายุ (ยังเป็นโครงเปล่า) |
-| `caregiver-dashboard.html` | แดชบอร์ดผู้ดูแล (ยังเป็นโครงเปล่า) |
-| `medical-dashboard.html` | แดชบอร์ดบุคลากรทางการแพทย์ (ยังเป็นโครงเปล่า) |
+| ไฟล์                       | หน้าที่                                             |
+| -------------------------- | --------------------------------------------------- |
+| `supabase-config.js`       | Config กลางของ Supabase (URL + anon key + client) ใช้ร่วมทุกหน้า |
+| `register.html`            | สมัครสมาชิก เลือกบทบาท แล้วบันทึกลงตาราง `profiles` |
+| `login.html`               | เข้าสู่ระบบ ดึง role แล้วพาไปหน้าตามบทบาท           |
+| `elderly-home.html`        | หน้าหลักของผู้สูงอายุ (ยังเป็นโครงเปล่า)            |
+| `caregiver-dashboard.html` | แดชบอร์ดผู้ดูแล (ยังเป็นโครงเปล่า)                  |
+| `medical-dashboard.html`   | แดชบอร์ดบุคลากรทางการแพทย์ (ยังเป็นโครงเปล่า)       |
 
 ทุกหน้า dashboard มี **session guard** อยู่แล้ว — ถ้ายังไม่ล็อกอินจะเด้งกลับ `login.html` และถ้า role ไม่ตรงกับหน้านั้นจะถูกส่งไปหน้าของตัวเอง
+
+**หมายเหตุเรื่อง script order:** ทุกหน้าต้องโหลดตามลำดับนี้เสมอ เพราะ `supabase-config.js` ใช้ `window.supabase` จาก SDK และหน้าต่าง ๆ ใช้ `supabaseClient` ที่ config ประกาศไว้ (global, ไม่ได้ใช้ module):
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script>
+  // โค้ดของหน้านั้น ๆ ใช้ supabaseClient ได้เลย
+</script>
+```
 
 ---
 
@@ -38,7 +49,7 @@
 
 ### 1. โคลนโปรเจกต์
 
-```bash
+```
 git clone https://github.com/yankawee-bai/bai-ykw15.git
 cd bai-ykw15
 ```
@@ -47,7 +58,7 @@ cd bai-ykw15
 
 อย่าเปิดไฟล์ด้วยการดับเบิลคลิก (จะได้ URL แบบ `file://` ซึ่งอาจติด CORS) ให้รัน local server แทน
 
-```bash
+```
 python3 -m http.server 3000
 ```
 
@@ -65,12 +76,12 @@ python3 -m http.server 3000
 
 ### ตาราง `profiles`
 
-| คอลัมน์ | ชนิด | หมายเหตุ |
-|---|---|---|
-| `id` | uuid | PK, อ้างอิง `auth.users(id)`, ลบ user แล้วลบตาม |
-| `full_name` | text | ชื่อ-นามสกุล |
-| `role` | text | `elderly` / `caregiver` / `medical` (มี check constraint) |
-| `created_at` | timestamptz | ค่าเริ่มต้น `now()` |
+| คอลัมน์      | ชนิด        | หมายเหตุ                                                  |
+| ------------ | ----------- | --------------------------------------------------------- |
+| `id`         | uuid        | PK, อ้างอิง `auth.users(id)`, ลบ user แล้วลบตาม           |
+| `full_name`  | text        | ชื่อ-นามสกุล                                              |
+| `role`       | text        | `elderly` / `caregiver` / `medical` (มี check constraint) |
+| `created_at` | timestamptz | ค่าเริ่มต้น `now()`                                       |
 
 ### SQL ที่ใช้ตั้งค่า (รันไปแล้ว ไม่ต้องรันซ้ำ)
 
@@ -107,11 +118,11 @@ create policy "Users can update own profile" on public.profiles
 
 Authentication → Sign In / Providers
 
-| ตัวเลือก | ค่าปัจจุบัน | เหตุผล |
-|---|---|---|
-| Allow new users to sign up | **ON** | ให้สมัครสมาชิกได้ |
-| Confirm email | **OFF** | ปิดชั่วคราวระหว่างพัฒนา |
-| Email provider | **Enabled** | ใช้ล็อกอินด้วยอีเมล/รหัสผ่าน |
+| ตัวเลือก                   | ค่าปัจจุบัน | เหตุผล                       |
+| -------------------------- | ----------- | ---------------------------- |
+| Allow new users to sign up | **ON**      | ให้สมัครสมาชิกได้            |
+| Confirm email              | **OFF**     | ปิดชั่วคราวระหว่างพัฒนา      |
+| Email provider             | **Enabled** | ใช้ล็อกอินด้วยอีเมล/รหัสผ่าน |
 
 ### ทำไมต้องปิด Confirm email
 
@@ -152,7 +163,7 @@ repo ต้องเป็น **public** ถ้าจะใช้ Pages ฟร�
 
 ### ระยะสั้น
 
-- [ ] แยก config Supabase ออกเป็น `supabase-config.js` (ตอนนี้ copy ซ้ำอยู่ 5 ไฟล์)
+- [x] แยก config Supabase ออกเป็น `supabase-config.js` (ตอนนี้ copy ซ้ำอยู่ 5 ไฟล์)
 - [ ] ออกแบบและสร้างเนื้อหาจริงในหน้า dashboard ทั้ง 3
 - [ ] สร้าง `index.html` เป็นหน้าแรก
 - [ ] ตารางเชื่อมความสัมพันธ์ ผู้ดูแล ↔ ผู้สูงอายุ
@@ -169,11 +180,12 @@ repo ต้องเป็น **public** ถ้าจะใช้ Pages ฟร�
 
 ## แก้ปัญหาที่เจอบ่อย
 
-| ข้อความ error | สาเหตุและวิธีแก้ |
-|---|---|
-| `Email signups are disabled` | Allow new users to sign up หรือ Email provider ปิดอยู่ — เปิดแล้วกด Save |
-| `permission denied for table profiles` | ยังไม่ได้รันคำสั่ง `grant` — ดูหัวข้อโครงสร้างฐานข้อมูล |
+| ข้อความ error                                | สาเหตุและวิธีแก้                                                           |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
+| `Email signups are disabled`                 | Allow new users to sign up หรือ Email provider ปิดอยู่ — เปิดแล้วกด Save   |
+| `permission denied for table profiles`       | ยังไม่ได้รันคำสั่ง `grant` — ดูหัวข้อโครงสร้างฐานข้อมูล                    |
 | `new row violates row-level security policy` | ยังไม่ได้สร้าง policy หรือตอน insert ไม่มี session (Confirm email ยังเปิด) |
-| `email rate limit exceeded` | โควตา 2 อีเมล/ชม. เต็ม — ปิด Confirm email แล้วรอครบ 1 ชม. |
-| เข้าสู่ระบบแล้วขึ้น "ไม่พบข้อมูลโปรไฟล์" | ไม่มีแถวใน `profiles` หรือ RLS select policy หาย |
-| หน้า dashboard เด้งกลับ login ตลอด | session หมดอายุ หรือ role ในตารางไม่ตรงกับหน้าที่เปิด |
+| `email rate limit exceeded`                  | โควตา 2 อีเมล/ชม. เต็ม — ปิด Confirm email แล้วรอครบ 1 ชม.                 |
+| เข้าสู่ระบบแล้วขึ้น "ไม่พบข้อมูลโปรไฟล์"     | ไม่มีแถวใน `profiles` หรือ RLS select policy หาย                           |
+| หน้า dashboard เด้งกลับ login ตลอด           | session หมดอายุ หรือ role ในตารางไม่ตรงกับหน้าที่เปิด                      |
+| `supabase is not defined` หรือ `supabaseClient is not defined` | script โหลดผิดลำดับ — ต้องโหลด SDK ก่อน แล้วค่อยโหลด `supabase-config.js` ก่อน script ของหน้านั้น |
