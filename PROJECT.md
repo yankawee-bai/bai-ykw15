@@ -34,6 +34,8 @@
 
 ทุกหน้า dashboard มี **session guard** อยู่แล้ว — ถ้ายังไม่ล็อกอินจะเด้งกลับ `login.html` และถ้า role ไม่ตรงกับหน้านั้นจะถูกส่งไปหน้าของตัวเอง
 
+**`caregiver_links.sql`** ไม่ใช่ไฟล์ที่เว็บโหลด แต่เป็นสคริปต์ตั้งค่าฐานข้อมูล รันครั้งเดียวใน Supabase SQL editor (ดูรายละเอียดในหัวข้อโครงสร้างฐานข้อมูล → ตาราง `caregiver_links`)
+
 **หมายเหตุเรื่อง script order:** ทุกหน้าต้องโหลดตามลำดับนี้เสมอ เพราะ `supabase-config.js` ใช้ `window.supabase` จาก SDK และหน้าต่าง ๆ ใช้ `supabaseClient` ที่ config ประกาศไว้ (global, ไม่ได้ใช้ module):
 
 ```html
@@ -82,6 +84,7 @@ python -m http.server 3000
 | `id`         | uuid        | PK, อ้างอิง `auth.users(id)`, ลบ user แล้วลบตาม           |
 | `full_name`  | text        | ชื่อ-นามสกุล                                              |
 | `role`       | text        | `elderly` / `caregiver` / `medical` (มี check constraint) |
+| `email`      | text        | unique, เก็บซ้ำจาก `auth.users.email` เพราะฝั่ง client ด้วย anon key query `auth.users` ตรงไม่ได้ ใช้สำหรับผู้ดูแลค้นหาผู้สูงอายุตอนขอเชื่อมโยง (ดูหัวข้อ `caregiver_links`) |
 | `created_at` | timestamptz | ค่าเริ่มต้น `now()`                                       |
 
 ### SQL ที่ใช้ตั้งค่า (รันไปแล้ว ไม่ต้องรันซ้ำ)
@@ -109,9 +112,36 @@ create policy "Users can update own profile" on public.profiles
 
 ### RLS
 
-เปิด RLS ไว้ ทุก policy บังคับ `auth.uid() = id` — แต่ละคนเห็นและแก้ได้เฉพาะโปรไฟล์ตัวเอง
+เปิด RLS ไว้ ทุก policy บังคับ `auth.uid() = id` — แต่ละคนเห็นและแก้ได้เฉพาะโปรไฟล์ตัวเอง (มี policy เพิ่มเติมจากตาราง `caregiver_links` ด้านล่าง ที่เปิดให้คู่ที่เชื่อมโยงกันแล้วเห็นโปรไฟล์กันได้)
 
 **สำคัญ:** publishable key อยู่ในโค้ดที่ใครก็เปิดดูได้ ความปลอดภัยทั้งหมดอยู่ที่ RLS ฝั่ง database เพราะฉะนั้น **ตารางใหม่ทุกตารางต้องเปิด RLS และเขียน policy เสมอ** ห้ามลืม
+
+---
+
+### ตาราง `caregiver_links`
+
+เชื่อมความสัมพันธ์ผู้ดูแล ↔ ผู้สูงอายุ แบบ many-to-many (ผู้ดูแล 1 คนดูแลผู้สูงอายุได้หลายคน และผู้สูงอายุ 1 คนมีผู้ดูแลได้หลายคน) สคริปต์เต็มอยู่ที่ `caregiver_links.sql`
+
+| คอลัมน์         | ชนิด        | หมายเหตุ                                              |
+| --------------- | ----------- | ------------------------------------------------------ |
+| `id`            | uuid        | PK                                                      |
+| `caregiver_id`  | uuid        | FK → `profiles(id)`, ต้องมี `role = 'caregiver'`        |
+| `elderly_id`    | uuid        | FK → `profiles(id)`, ต้องมี `role = 'elderly'`          |
+| `status`        | text        | `pending` / `accepted` / `declined`                     |
+| `requested_by`  | uuid        | FK → `profiles(id)`, ตอนนี้ล็อกไว้ให้เป็นฝั่ง caregiver เสมอ |
+| `created_at`    | timestamptz | ค่าเริ่มต้น `now()`                                     |
+| `responded_at`  | timestamptz | เวลาที่ผู้สูงอายุตอบรับ/ปฏิเสธ (อัปเดตเองตอน update)    |
+
+**flow:** ผู้ดูแลค้นหาผู้สูงอายุด้วยอีเมลผ่านฟังก์ชัน `find_elderly_by_email()` (SECURITY DEFINER, ไม่เปิด RLS ของ `profiles` ให้ทุกคน) → insert แถว `status = 'pending'` → ผู้สูงอายุเป็นคนกด accepted/declined เอง → ยกเลิกหรือตัดความสัมพันธ์ได้ทั้งสองฝ่ายผ่าน delete
+
+RLS บังคับว่า:
+- เห็นได้เฉพาะคู่ที่ตัวเองอยู่ในแถวนั้น
+- มีแค่ caregiver เป็นฝ่ายสร้างคำขอได้ (insert)
+- มีแค่ elderly เป็นฝ่าย update status ได้
+- caregiver ยกเลิกได้เฉพาะคำขอที่ยัง pending, elderly ตัดความสัมพันธ์ได้ทุกเมื่อ
+- เพิ่ม select policy ให้ `profiles` อีก 1 อัน: คู่ที่ `status = accepted` แล้วเห็นชื่อกันได้ (ไม่งั้น join จะได้ `null` เพราะ policy เดิมของ `profiles` เปิดให้เห็นแค่โปรไฟล์ตัวเอง)
+
+มี trigger `enforce_caregiver_link_roles` กันไว้อีกชั้นด้วย เผื่อ insert ผิด role (เช่นเอา `caregiver_id` ที่จริงเป็น `elderly` มาใส่) จะ error ทันทีตั้งแต่ระดับ database
 
 ---
 
@@ -167,7 +197,8 @@ repo ต้องเป็น **public** ถ้าจะใช้ Pages ฟร�
 - [x] แยก config Supabase ออกเป็น `supabase-config.js` (ตอนนี้ copy ซ้ำอยู่ 5 ไฟล์)
 - [ ] ออกแบบและสร้างเนื้อหาจริงในหน้า dashboard ทั้ง 3
 - [x] สร้าง `index.html` เป็นหน้าแรก
-- [ ] ตารางเชื่อมความสัมพันธ์ ผู้ดูแล ↔ ผู้สูงอายุ
+- [x] ตารางเชื่อมความสัมพันธ์ ผู้ดูแล ↔ ผู้สูงอายุ (`caregiver_links` — schema/RLS/function เสร็จแล้ว ทดสอบผ่าน console)
+- [ ] สร้าง UI ขอ/ยอมรับเชื่อมโยงใน `caregiver-dashboard.html` และ `elderly-home.html` (ตอนนี้ทดสอบผ่าน DevTools console เท่านั้น)
 
 ### ระยะยาว
 
@@ -190,3 +221,4 @@ repo ต้องเป็น **public** ถ้าจะใช้ Pages ฟร�
 | เข้าสู่ระบบแล้วขึ้น "ไม่พบข้อมูลโปรไฟล์"     | ไม่มีแถวใน `profiles` หรือ RLS select policy หาย                           |
 | หน้า dashboard เด้งกลับ login ตลอด           | session หมดอายุ หรือ role ในตารางไม่ตรงกับหน้าที่เปิด                      |
 | `supabase is not defined` หรือ `supabaseClient is not defined` | script โหลดผิดลำดับ — ต้องโหลด SDK ก่อน แล้วค่อยโหลด `supabase-config.js` ก่อน script ของหน้านั้น |
+| join `caregiver_links` ไป `profiles` แล้วได้ `profiles: null` | ไม่ใช่ query ผิด — RLS ของ `profiles` เดิมเปิดให้เห็นแค่โปรไฟล์ตัวเอง ต้องมี select policy เพิ่มที่อนุญาตให้คู่ `status = accepted` เห็นกันได้ (มีอยู่แล้วในสคริปต์ `caregiver_links.sql`) |

@@ -216,8 +216,7 @@
       // 2) บันทึกข้อมูลเพิ่มเติมลงตาราง profiles
       const { error: profileError } = await supabaseClient
         .from('profiles')
-        .insert([{ id: data.user.id, full_name: fullName, role: role }]);
-
+        .insert([{ id: data.user.id, full_name: fullName, role: role, email: email }]);
       // 23505 = มีแถวนี้อยู่แล้ว (เช่นถ้าวันหลังไปเพิ่ม trigger) ไม่ถือว่าผิดพลาด
       if (profileError && profileError.code !== '23505') {
         showMsg("สมัครสำเร็จ แต่บันทึกโปรไฟล์ไม่สำเร็จ: " + profileError.message, "error");
