@@ -7,47 +7,81 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: 'Segoe UI', 'Sarabun', sans-serif;
-    background: #eef1f5;
-    min-height: 100vh;
-  }
-  header {
-    background: #2b8ae0;
-    color: white;
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  header h1 { font-size: 18px; margin: 0; }
-  .logout {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .logout:hover { background: rgba(255,255,255,0.3); }
-  main { max-width: 900px; margin: 0 auto; padding: 24px; }
-  .card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px 28px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-    margin-bottom: 20px;
-  }
-  .card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
-  .row { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
-  .row:last-child { border-bottom: none; }
-  .row .k { width: 140px; color: #6b7386; }
-  .row .v { color: #1c2438; font-weight: 600; }
-  .todo { color: #6b7386; font-size: 14px; line-height: 1.8; }
-  .loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Sarabun', sans-serif;
+  background: #eef1f5;
+  min-height: 100vh;
+}
+header {
+  background: #2b8ae0;
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header h1 { font-size: 18px; margin: 0; }
+.logout {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.logout:hover { background: rgba(255,255,255,0.3); }
+main { max-width: 900px; margin: 0 auto; padding: 24px; }
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  margin-bottom: 20px;
+}
+.card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
+.row { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
+.row:last-child { border-bottom: none; }
+.row .k { width: 140px; color: #6b7386; }
+.row .v { color: #1c2438; font-weight: 600; }
+.todo { color: #6b7386; font-size: 14px; line-height: 1.8; }
+.loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+
+.empty { color: #9aa1b0; font-size: 13.5px; padding: 6px 0; }
+
+.link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.link-item:last-child { border-bottom: none; }
+.link-item .info { min-width: 0; }
+.link-item .name { font-size: 15px; font-weight: 600; color: #1c2438; }
+.link-item .sub { font-size: 12.5px; color: #8a92a3; margin-top: 2px; }
+.link-item .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.btn-sm {
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-sm.accept { background: #2b8ae0; color: white; }
+.btn-sm.accept:hover { background: #226fb4; }
+.btn-sm.decline { background: #eef1f5; color: #5a6376; }
+.btn-sm.decline:hover { background: #e2e6ed; }
+.btn-sm.danger { background: #fbe3e0; color: #b3392a; }
+.btn-sm.danger:hover { background: #f6cec9; }
+
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.err { color: #c0392b; }
 </style>
 </head>
 <body>
@@ -66,6 +100,17 @@
       <div class="row"><div class="k">บทบาท</div><div class="v" id="role">-</div></div>
     </div>
 
+    <div class="card" id="pendingCard" style="display:none">
+      <h2>คำขอเชื่อมโยงจากผู้ดูแล</h2>
+      <div id="pendingList"><div class="empty">กำลังโหลด...</div></div>
+      <div class="msg" id="pendingMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>ผู้ดูแลของคุณ</h2>
+      <div id="acceptedList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+
     <div class="card">
       <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
       <div class="todo">
@@ -81,45 +126,144 @@
 <div class="loading" id="loading">กำลังโหลด...</div>
 
 <script>
- 
+let myId = null;
 
-  (async () => {
-    // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-      window.location.replace("login.html");
-      return;
-    }
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
 
-    // 2) ดึงโปรไฟล์
-    const { data: profile } = await supabaseClient
-      .from('profiles')
-      .select('full_name, role')
-      .eq('id', session.user.id)
-      .single();
+function setPendingMsg(text) {
+  document.getElementById('pendingMsg').textContent = text || '';
+}
 
-    // 3) กันไม่ให้ role อื่นเข้าหน้านี้
-    if (profile && profile.role !== 'elderly') {
-      const map = {
-        caregiver: "caregiver-dashboard.html",
-        medical: "medical-dashboard.html"
-      };
-      window.location.replace(map[profile.role] || "login.html");
-      return;
-    }
+async function loadLinks() {
+  const pendingCard = document.getElementById('pendingCard');
+  const pendingEl = document.getElementById('pendingList');
+  const acceptedEl = document.getElementById('acceptedList');
 
-    document.getElementById('fullName').textContent = (profile && profile.full_name) || "-";
-    document.getElementById('email').textContent = session.user.email;
-    document.getElementById('role').textContent = "ผู้สูงอายุ / สมาชิกในครอบครัว";
+  const { data: links, error } = await supabaseClient
+    .from('caregiver_links')
+    .select('id, status, caregiver_id, profiles!caregiver_links_caregiver_id_fkey(full_name, email)')
+    .eq('elderly_id', myId)
+    .order('created_at', { ascending: false });
 
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-  })();
+  if (error) {
+    acceptedEl.innerHTML = '<div class="empty">โหลดรายชื่อไม่สำเร็จ</div>';
+    pendingCard.style.display = 'none';
+    return;
+  }
 
-  document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-    window.location.replace("login.html");
+  const pending = (links || []).filter(l => l.status === 'pending');
+  const accepted = (links || []).filter(l => l.status === 'accepted');
+
+  if (pending.length > 0) {
+    pendingCard.style.display = 'block';
+    pendingEl.innerHTML = pending.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.profiles ? l.profiles.full_name : '-')}</div>
+          <div class="sub">${escapeHtml(l.profiles ? l.profiles.email : '-')} ต้องการเชื่อมโยงเป็นผู้ดูแล</div>
+        </div>
+        <div class="actions">
+          <button class="btn-sm accept" data-accept="${l.id}">ยอมรับ</button>
+          <button class="btn-sm decline" data-decline="${l.id}">ปฏิเสธ</button>
+        </div>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('[data-accept]').forEach(btn => {
+      btn.addEventListener('click', () => respond(btn.getAttribute('data-accept'), 'accepted'));
+    });
+    document.querySelectorAll('[data-decline]').forEach(btn => {
+      btn.addEventListener('click', () => respond(btn.getAttribute('data-decline'), 'declined'));
+    });
+  } else {
+    pendingCard.style.display = 'none';
+  }
+
+  acceptedEl.innerHTML = accepted.length
+    ? accepted.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.profiles ? l.profiles.full_name : '-')}</div>
+          <div class="sub">${escapeHtml(l.profiles ? l.profiles.email : '-')}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-sm danger" data-remove="${l.id}">ยกเลิกการเชื่อมโยง</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty">ยังไม่มีผู้ดูแลที่เชื่อมโยงอยู่</div>';
+
+  document.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => handleRemove(btn.getAttribute('data-remove')));
   });
+}
+
+async function respond(linkId, status) {
+  setPendingMsg('');
+  const { error } = await supabaseClient
+    .from('caregiver_links')
+    .update({ status, responded_at: new Date().toISOString() })
+    .eq('id', linkId);
+
+  if (error) {
+    setPendingMsg('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง');
+    return;
+  }
+  loadLinks();
+}
+
+async function handleRemove(linkId) {
+  if (!confirm('ยกเลิกการเชื่อมโยงกับผู้ดูแลคนนี้หรือไม่?')) return;
+  const { error } = await supabaseClient.from('caregiver_links').delete().eq('id', linkId);
+  if (error) return;
+  loadLinks();
+}
+
+(async () => {
+  // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  // 2) ดึงโปรไฟล์
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('full_name, role')
+    .eq('id', session.user.id)
+    .single();
+
+  // 3) กันไม่ให้ role อื่นเข้าหน้านี้
+  if (profile && profile.role !== 'elderly') {
+    const map = {
+      caregiver: "caregiver-dashboard.html",
+      medical: "medical-dashboard.html"
+    };
+    window.location.replace(map[profile.role] || "login.html");
+    return;
+  }
+
+  myId = session.user.id;
+
+  document.getElementById('fullName').textContent = (profile && profile.full_name) || "-";
+  document.getElementById('email').textContent = session.user.email;
+  document.getElementById('role').textContent = "ผู้สูงอายุ / สมาชิกในครอบครัว";
+
+  await loadLinks();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.replace("login.html");
+});
 </script>
 
 </body>
