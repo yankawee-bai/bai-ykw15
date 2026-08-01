@@ -7,47 +7,116 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: 'Segoe UI', 'Sarabun', sans-serif;
-    background: #eef1f5;
-    min-height: 100vh;
-  }
-  header {
-    background: #d97757;
-    color: white;
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  header h1 { font-size: 18px; margin: 0; }
-  .logout {
-    background: rgba(255,255,255,0.2);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .logout:hover { background: rgba(255,255,255,0.3); }
-  main { max-width: 900px; margin: 0 auto; padding: 24px; }
-  .card {
-    background: white;
-    border-radius: 16px;
-    padding: 24px 28px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-    margin-bottom: 20px;
-  }
-  .card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
-  .row { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
-  .row:last-child { border-bottom: none; }
-  .row .k { width: 140px; color: #6b7386; }
-  .row .v { color: #1c2438; font-weight: 600; }
-  .todo { color: #6b7386; font-size: 14px; line-height: 1.8; }
-  .loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Sarabun', sans-serif;
+  background: #eef1f5;
+  min-height: 100vh;
+}
+header {
+  background: #d97757;
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+header h1 { font-size: 18px; margin: 0; }
+.logout {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.logout:hover { background: rgba(255,255,255,0.3); }
+main { max-width: 900px; margin: 0 auto; padding: 24px; }
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  margin-bottom: 20px;
+}
+.card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
+.card h3 { font-size: 13px; margin: 20px 0 10px; color: #6b7386; text-transform: uppercase; letter-spacing: 0.03em; }
+.row { display: flex; padding: 8px 0; border-bottom: 1px solid #f0f2f5; font-size: 14px; }
+.row:last-child { border-bottom: none; }
+.row .k { width: 140px; color: #6b7386; }
+.row .v { color: #1c2438; font-weight: 600; }
+.todo { color: #6b7386; font-size: 14px; line-height: 1.8; }
+.loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+
+.link-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.link-form input {
+  flex: 1;
+  min-width: 220px;
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.link-form input:focus { outline: none; border-color: #d97757; }
+.link-form button {
+  background: #d97757;
+  color: white;
+  border: none;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.link-form button:hover { background: #c1663f; }
+.link-form button:disabled { background: #c9c9c9; cursor: not-allowed; }
+
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.ok { color: #1a8a4a; }
+.msg.err { color: #c0392b; }
+
+.empty { color: #9aa1b0; font-size: 13.5px; padding: 6px 0; }
+
+.link-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.link-item:last-child { border-bottom: none; }
+.link-item .info { min-width: 0; }
+.link-item .name { font-size: 14.5px; font-weight: 600; color: #1c2438; }
+.link-item .sub { font-size: 12.5px; color: #8a92a3; margin-top: 2px; }
+.link-item .actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+.badge {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+.badge.pending { background: #fdeecb; color: #92650b; }
+.badge.accepted { background: #d9f2e3; color: #157a4a; }
+
+.btn-sm {
+  border: none;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-sm.danger { background: #fbe3e0; color: #b3392a; }
+.btn-sm.danger:hover { background: #f6cec9; }
+.btn-sm.ghost { background: #eef1f5; color: #5a6376; }
+.btn-sm.ghost:hover { background: #e2e6ed; }
 </style>
 </head>
 <body>
@@ -67,9 +136,23 @@
     </div>
 
     <div class="card">
+      <h2>เชื่อมโยงกับผู้สูงอายุ</h2>
+      <form class="link-form" id="linkForm">
+        <input type="email" id="elderlyEmail" placeholder="กรอกอีเมลของผู้สูงอายุ" required>
+        <button type="submit" id="linkSubmitBtn">ส่งคำขอ</button>
+      </form>
+      <div class="msg" id="linkMsg"></div>
+
+      <h3>ผู้สูงอายุที่ดูแลอยู่</h3>
+      <div id="acceptedList"><div class="empty">กำลังโหลด...</div></div>
+
+      <h3>คำขอที่รอตอบรับ</h3>
+      <div id="pendingList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+
+    <div class="card">
       <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
       <div class="todo">
-        • รายชื่อผู้สูงอายุที่ดูแล<br>
         • บันทึกการดูแลประจำวัน<br>
         • แจ้งเตือนเมื่อผู้สูงอายุกดขอความช่วยเหลือ<br>
         • ตารางเวรและนัดหมาย
@@ -81,45 +164,180 @@
 <div class="loading" id="loading">กำลังโหลด...</div>
 
 <script>
- 
+let myId = null;
 
-  (async () => {
-    // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    if (!session) {
-      window.location.replace("login.html");
-      return;
-    }
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
 
-    // 2) ดึงโปรไฟล์
-    const { data: profile } = await supabaseClient
-      .from('profiles')
-      .select('full_name, role')
-      .eq('id', session.user.id)
-      .single();
+function setMsg(text, type) {
+  const el = document.getElementById('linkMsg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
 
-    // 3) กันไม่ให้ role อื่นเข้าหน้านี้
-    if (profile && profile.role !== 'caregiver') {
-      const map = {
-        elderly: "elderly-home.html",
-        medical: "medical-dashboard.html"
-      };
-      window.location.replace(map[profile.role] || "login.html");
-      return;
-    }
+async function loadLinks() {
+  const acceptedEl = document.getElementById('acceptedList');
+  const pendingEl = document.getElementById('pendingList');
 
-    document.getElementById('fullName').textContent = (profile && profile.full_name) || "-";
-    document.getElementById('email').textContent = session.user.email;
-    document.getElementById('role').textContent = "ผู้ดูแล";
+  const { data: links, error } = await supabaseClient
+    .from('caregiver_links')
+    .select('id, status, elderly_id, elderly_email_snapshot, profiles!caregiver_links_elderly_id_fkey(full_name, email)')
+    .eq('caregiver_id', myId)
+    .order('created_at', { ascending: false });
 
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
-  })();
+  if (error) {
+    acceptedEl.innerHTML = '<div class="empty">โหลดรายชื่อไม่สำเร็จ</div>';
+    pendingEl.innerHTML = '';
+    return;
+  }
 
-  document.getElementById('logoutBtn').addEventListener('click', async () => {
-    await supabaseClient.auth.signOut();
-    window.location.replace("login.html");
+  const accepted = (links || []).filter(l => l.status === 'accepted');
+  const pending = (links || []).filter(l => l.status === 'pending');
+
+  acceptedEl.innerHTML = accepted.length
+    ? accepted.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.profiles ? l.profiles.full_name : '-')}</div>
+          <div class="sub">${escapeHtml(l.profiles ? l.profiles.email : '-')}</div>
+        </div>
+        <div class="actions">
+          <span class="badge accepted">เชื่อมโยงแล้ว</span>
+          <button class="btn-sm danger" data-unlink="${l.id}">ยกเลิกการเชื่อมโยง</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty">ยังไม่มีผู้สูงอายุที่เชื่อมโยงอยู่</div>';
+
+  pendingEl.innerHTML = pending.length
+    ? pending.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.elderly_email_snapshot || (l.profiles && l.profiles.full_name) || 'คำขอที่ส่งไปแล้ว')}</div>
+          <div class="sub">รอผู้สูงอายุตอบรับคำขอ</div>
+        </div>
+        <div class="actions">
+          <span class="badge pending">รอตอบรับ</span>
+          <button class="btn-sm ghost" data-cancel="${l.id}">ยกเลิกคำขอ</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty">ไม่มีคำขอที่ค้างอยู่</div>';
+
+  document.querySelectorAll('[data-unlink]').forEach(btn => {
+    btn.addEventListener('click', () => handleRemove(btn.getAttribute('data-unlink'), 'ยกเลิกการเชื่อมโยงนี้หรือไม่?'));
   });
+  document.querySelectorAll('[data-cancel]').forEach(btn => {
+    btn.addEventListener('click', () => handleRemove(btn.getAttribute('data-cancel'), 'ยกเลิกคำขอนี้หรือไม่?'));
+  });
+}
+
+async function handleRemove(linkId, confirmText) {
+  if (!confirm(confirmText)) return;
+  const { error } = await supabaseClient.from('caregiver_links').delete().eq('id', linkId);
+  if (error) {
+    setMsg('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+    return;
+  }
+  loadLinks();
+}
+
+document.getElementById('linkForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const emailInput = document.getElementById('elderlyEmail');
+  const email = emailInput.value.trim().toLowerCase();
+  if (!email) return;
+
+  const submitBtn = document.getElementById('linkSubmitBtn');
+  submitBtn.disabled = true;
+  setMsg('กำลังค้นหา...', '');
+
+  try {
+    const { data: found, error: findError } = await supabaseClient
+      .rpc('find_elderly_by_email', { p_email: email });
+
+    if (findError) {
+      setMsg('ค้นหาไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+      return;
+    }
+    if (!found || found.length === 0) {
+      setMsg('ไม่พบผู้สูงอายุที่ใช้อีเมลนี้ในระบบ', 'err');
+      return;
+    }
+
+    const elderlyId = found[0].id;
+
+    const { error: insertError } = await supabaseClient
+      .from('caregiver_links')
+      .insert([{
+        caregiver_id: myId,
+        elderly_id: elderlyId,
+        requested_by: myId,
+        status: 'pending',
+        elderly_email_snapshot: email
+      }]);
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        setMsg('เคยส่งคำขอถึงผู้สูงอายุคนนี้ไปแล้ว', 'err');
+      } else {
+        setMsg('ส่งคำขอไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+      }
+      return;
+    }
+
+    setMsg(`ส่งคำขอถึง ${found[0].full_name || email} แล้ว รอผู้สูงอายุตอบรับ`, 'ok');
+    emailInput.value = '';
+    loadLinks();
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+(async () => {
+  // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  // 2) ดึงโปรไฟล์
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('full_name, role')
+    .eq('id', session.user.id)
+    .single();
+
+  // 3) กันไม่ให้ role อื่นเข้าหน้านี้
+  if (profile && profile.role !== 'caregiver') {
+    const map = {
+      elderly: "elderly-home.html",
+      medical: "medical-dashboard.html"
+    };
+    window.location.replace(map[profile.role] || "login.html");
+    return;
+  }
+
+  myId = session.user.id;
+
+  document.getElementById('fullName').textContent = (profile && profile.full_name) || "-";
+  document.getElementById('email').textContent = session.user.email;
+  document.getElementById('role').textContent = "ผู้ดูแล";
+
+  await loadLinks();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.replace("login.html");
+});
 </script>
 
 </body>
