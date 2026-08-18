@@ -111,6 +111,17 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
       <div id="acceptedList"><div class="empty">กำลังโหลด...</div></div>
     </div>
 
+    <div class="card" id="medPendingCard" style="display:none">
+      <h2>คำขอเชื่อมโยงจากบุคลากรทางการแพทย์</h2>
+      <div id="medPendingList"><div class="empty">กำลังโหลด...</div></div>
+      <div class="msg" id="medPendingMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>บุคลากรทางการแพทย์ของคุณ</h2>
+      <div id="medAcceptedList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+
     <div class="card">
       <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
       <div class="todo">
@@ -136,6 +147,10 @@ function escapeHtml(str) {
 
 function setPendingMsg(text) {
   document.getElementById('pendingMsg').textContent = text || '';
+}
+
+function setMedPendingMsg(text) {
+  document.getElementById('medPendingMsg').textContent = text || '';
 }
 
 async function loadLinks() {
@@ -223,6 +238,91 @@ async function handleRemove(linkId) {
   loadLinks();
 }
 
+async function loadMedicalLinks() {
+  const pendingCard = document.getElementById('medPendingCard');
+  const pendingEl = document.getElementById('medPendingList');
+  const acceptedEl = document.getElementById('medAcceptedList');
+
+  const { data: links, error } = await supabaseClient
+    .from('medical_links')
+    .select('id, status, medical_id, profiles!medical_links_medical_id_fkey(full_name, email)')
+    .eq('patient_id', myId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    acceptedEl.innerHTML = '<div class="empty">โหลดรายชื่อไม่สำเร็จ</div>';
+    pendingCard.style.display = 'none';
+    return;
+  }
+
+  const pending = (links || []).filter(l => l.status === 'pending');
+  const accepted = (links || []).filter(l => l.status === 'accepted');
+
+  if (pending.length > 0) {
+    pendingCard.style.display = 'block';
+    pendingEl.innerHTML = pending.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.profiles ? l.profiles.full_name : '-')}</div>
+          <div class="sub">${escapeHtml(l.profiles ? l.profiles.email : '-')} ต้องการเชื่อมโยงเป็นบุคลากรทางการแพทย์</div>
+        </div>
+        <div class="actions">
+          <button class="btn-sm accept" data-med-accept="${l.id}">ยอมรับ</button>
+          <button class="btn-sm decline" data-med-decline="${l.id}">ปฏิเสธ</button>
+        </div>
+      </div>
+    `).join('');
+
+    document.querySelectorAll('[data-med-accept]').forEach(btn => {
+      btn.addEventListener('click', () => respondMedical(btn.getAttribute('data-med-accept'), 'accepted'));
+    });
+    document.querySelectorAll('[data-med-decline]').forEach(btn => {
+      btn.addEventListener('click', () => respondMedical(btn.getAttribute('data-med-decline'), 'declined'));
+    });
+  } else {
+    pendingCard.style.display = 'none';
+  }
+
+  acceptedEl.innerHTML = accepted.length
+    ? accepted.map(l => `
+      <div class="link-item">
+        <div class="info">
+          <div class="name">${escapeHtml(l.profiles ? l.profiles.full_name : '-')}</div>
+          <div class="sub">${escapeHtml(l.profiles ? l.profiles.email : '-')}</div>
+        </div>
+        <div class="actions">
+          <button class="btn-sm danger" data-med-remove="${l.id}">ยกเลิกการเชื่อมโยง</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="empty">ยังไม่มีบุคลากรทางการแพทย์ที่เชื่อมโยงอยู่</div>';
+
+  document.querySelectorAll('[data-med-remove]').forEach(btn => {
+    btn.addEventListener('click', () => handleRemoveMedical(btn.getAttribute('data-med-remove')));
+  });
+}
+
+async function respondMedical(linkId, status) {
+  setMedPendingMsg('');
+  const { error } = await supabaseClient
+    .from('medical_links')
+    .update({ status, responded_at: new Date().toISOString() })
+    .eq('id', linkId);
+
+  if (error) {
+    setMedPendingMsg('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง');
+    return;
+  }
+  loadMedicalLinks();
+}
+
+async function handleRemoveMedical(linkId) {
+  if (!confirm('ยกเลิกการเชื่อมโยงกับบุคลากรทางการแพทย์คนนี้หรือไม่?')) return;
+  const { error } = await supabaseClient.from('medical_links').delete().eq('id', linkId);
+  if (error) return;
+  loadMedicalLinks();
+}
+
 (async () => {
   // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
   const { data: { session } } = await supabaseClient.auth.getSession();
@@ -255,6 +355,7 @@ async function handleRemove(linkId) {
   document.getElementById('role').textContent = "ผู้สูงอายุ / สมาชิกในครอบครัว";
 
   await loadLinks();
+  await loadMedicalLinks();
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'block';
