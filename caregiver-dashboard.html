@@ -282,7 +282,20 @@ document.getElementById('linkForm').addEventListener('submit', async (e) => {
 
     if (insertError) {
       if (insertError.code === '23505') {
-        setMsg('เคยส่งคำขอถึงผู้สูงอายุคนนี้ไปแล้ว', 'err');
+        const { data: existing } = await supabaseClient
+          .from('caregiver_links')
+          .select('status')
+          .eq('caregiver_id', myId)
+          .eq('elderly_id', elderlyId)
+          .maybeSingle();
+
+        if (existing && existing.status === 'accepted') {
+          setMsg('เชื่อมโยงกับผู้สูงอายุคนนี้อยู่แล้ว', 'err');
+        } else if (existing && existing.status === 'pending') {
+          setMsg('มีคำขอที่ส่งไปหาผู้สูงอายุคนนี้ค้างอยู่ รอตอบรับอยู่', 'err');
+        } else {
+          setMsg('เคยส่งคำขอถึงผู้สูงอายุคนนี้ไปแล้ว', 'err');
+        }
       } else {
         setMsg('ส่งคำขอไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
       }
