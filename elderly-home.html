@@ -82,6 +82,74 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
 
 .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
 .msg.err { color: #c0392b; }
+.msg.ok { color: #1a8a4a; }
+
+.med-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.med-form input[type="text"] {
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.med-form input[type="text"]:focus { outline: none; border-color: #2b8ae0; }
+#medName { flex: 2; min-width: 160px; }
+#medDosage { flex: 1; min-width: 120px; }
+.meal-checks {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 2px;
+  font-size: 13.5px;
+  color: #4b5563;
+}
+.meal-checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.med-form button {
+  background: #2b8ae0;
+  color: white;
+  border: none;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.med-form button:hover { background: #226fb4; }
+.med-form button:disabled { background: #c9c9c9; cursor: not-allowed; }
+
+.meal-group { margin-top: 16px; }
+.meal-group:first-child { margin-top: 0; }
+.meal-group h3 {
+  font-size: 13px;
+  margin: 0 0 8px;
+  color: #6b7386;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.med-check-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.med-check-item:last-child { border-bottom: none; }
+.med-check-item input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; cursor: pointer; }
+.med-check-item .name { font-size: 14.5px; font-weight: 600; color: #1c2438; }
+.med-check-item .name.taken { text-decoration: line-through; color: #9aa1b0; }
+.med-check-item .sub { font-size: 12.5px; color: #8a92a3; }
+
+.med-manage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.med-manage-item:last-child { border-bottom: none; }
+.med-manage-item .name { font-size: 14px; font-weight: 600; color: #1c2438; }
+.med-manage-item .sub { font-size: 12.5px; color: #8a92a3; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -123,9 +191,32 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
     </div>
 
     <div class="card">
+      <h2>ตารางยาวันนี้</h2>
+      <div id="todayMedList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+
+    <div class="card">
+      <h2>จัดการรายการยา</h2>
+      <form class="med-form" id="medForm">
+        <input type="text" id="medName" placeholder="ชื่อยา" required>
+        <input type="text" id="medDosage" placeholder="ขนาด/จำนวน (เช่น 1 เม็ด)">
+        <button type="submit" id="medSubmitBtn">เพิ่มยา</button>
+      </form>
+      <div class="meal-checks">
+        <label><input type="checkbox" name="medMeal" value="เช้า"> เช้า</label>
+        <label><input type="checkbox" name="medMeal" value="เที่ยง"> เที่ยง</label>
+        <label><input type="checkbox" name="medMeal" value="เย็น"> เย็น</label>
+        <label><input type="checkbox" name="medMeal" value="ก่อนนอน"> ก่อนนอน</label>
+      </div>
+      <div class="msg" id="medMsg"></div>
+
+      <h3 style="font-size:13px;margin:20px 0 10px;color:#6b7386;text-transform:uppercase;letter-spacing:.03em;">รายการยาทั้งหมด</h3>
+      <div id="medManageList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+
+    <div class="card">
       <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
       <div class="todo">
-        • เตือนกินยา / ตารางยาประจำวัน<br>
         • บันทึกสัญญาณชีพ (ความดัน ชีพจร น้ำตาล)<br>
         • ปุ่มขอความช่วยเหลือฉุกเฉิน<br>
         • นัดหมายแพทย์
@@ -323,6 +414,170 @@ async function handleRemoveMedical(linkId) {
   loadMedicalLinks();
 }
 
+const MEAL_ORDER = ['เช้า', 'เที่ยง', 'เย็น', 'ก่อนนอน'];
+
+function todayStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function setMedMsg(text, type) {
+  const el = document.getElementById('medMsg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
+
+async function loadMedications() {
+  const todayEl = document.getElementById('todayMedList');
+  const manageEl = document.getElementById('medManageList');
+
+  const { data: meds, error: medError } = await supabaseClient
+    .from('medications')
+    .select('id, name, dosage, meal_times')
+    .eq('elderly_id', myId)
+    .order('created_at', { ascending: true });
+
+  if (medError) {
+    todayEl.innerHTML = '<div class="empty">โหลดรายการยาไม่สำเร็จ</div>';
+    manageEl.innerHTML = '';
+    return;
+  }
+
+  // จัดการรายการยา (ลิสต์เฉยๆ + ปุ่มลบ)
+  manageEl.innerHTML = (meds || []).length
+    ? meds.map(m => `
+      <div class="med-manage-item">
+        <div>
+          <div class="name">${escapeHtml(m.name)}</div>
+          <div class="sub">${escapeHtml(m.dosage || '')}${m.dosage ? ' · ' : ''}${escapeHtml((m.meal_times || []).join(', '))}</div>
+        </div>
+        <button class="btn-sm danger" data-med-delete="${m.id}">ลบ</button>
+      </div>
+    `).join('')
+    : '<div class="empty">ยังไม่มีรายการยา</div>';
+
+  document.querySelectorAll('[data-med-delete]').forEach(btn => {
+    btn.addEventListener('click', () => deleteMedication(btn.getAttribute('data-med-delete')));
+  });
+
+  if (!meds || meds.length === 0) {
+    todayEl.innerHTML = '<div class="empty">ยังไม่มีรายการยา เพิ่มได้ในการ์ดด้านล่าง</div>';
+    return;
+  }
+
+  // ตารางยาวันนี้ — เช็คว่ามื้อไหนกินแล้วบ้าง
+  const { data: logs } = await supabaseClient
+    .from('medication_logs')
+    .select('medication_id, meal_time')
+    .eq('elderly_id', myId)
+    .eq('log_date', todayStr());
+
+  const takenSet = new Set((logs || []).map(l => `${l.medication_id}|${l.meal_time}`));
+
+  todayEl.innerHTML = MEAL_ORDER
+    .map(meal => {
+      const medsForMeal = meds.filter(m => (m.meal_times || []).includes(meal));
+      if (medsForMeal.length === 0) return '';
+      return `
+        <div class="meal-group">
+          <h3>${escapeHtml(meal)}</h3>
+          ${medsForMeal.map(m => {
+            const taken = takenSet.has(`${m.id}|${meal}`);
+            return `
+              <div class="med-check-item">
+                <input type="checkbox" data-toggle-med="${m.id}" data-toggle-meal="${meal}" ${taken ? 'checked' : ''}>
+                <div>
+                  <div class="name${taken ? ' taken' : ''}">${escapeHtml(m.name)}</div>
+                  <div class="sub">${escapeHtml(m.dosage || '')}</div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    })
+    .join('') || '<div class="empty">ยาที่มีอยู่ยังไม่ได้กำหนดมื้อ</div>';
+
+  document.querySelectorAll('[data-toggle-med]').forEach(cb => {
+    cb.addEventListener('change', () => toggleTaken(
+      cb.getAttribute('data-toggle-med'),
+      cb.getAttribute('data-toggle-meal'),
+      cb.checked
+    ));
+  });
+}
+
+async function toggleTaken(medicationId, mealTime, checked) {
+  if (checked) {
+    const { error } = await supabaseClient.from('medication_logs').insert([{
+      medication_id: medicationId,
+      elderly_id: myId,
+      meal_time: mealTime,
+      log_date: todayStr(),
+      taken_by: myId
+    }]);
+    if (error) { loadMedications(); return; }
+  } else {
+    await supabaseClient
+      .from('medication_logs')
+      .delete()
+      .eq('medication_id', medicationId)
+      .eq('meal_time', mealTime)
+      .eq('log_date', todayStr());
+  }
+  loadMedications();
+}
+
+async function deleteMedication(medId) {
+  if (!confirm('ลบรายการยานี้หรือไม่? ประวัติการกินยาของยานี้จะถูกลบไปด้วย')) return;
+  const { error } = await supabaseClient.from('medications').delete().eq('id', medId);
+  if (error) return;
+  loadMedications();
+}
+
+document.getElementById('medForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nameInput = document.getElementById('medName');
+  const dosageInput = document.getElementById('medDosage');
+  const name = nameInput.value.trim();
+  const dosage = dosageInput.value.trim();
+  const mealTimes = Array.from(document.querySelectorAll('input[name="medMeal"]:checked')).map(cb => cb.value);
+
+  if (!name) return;
+  if (mealTimes.length === 0) {
+    setMedMsg('เลือกอย่างน้อย 1 มื้อ', 'err');
+    return;
+  }
+
+  const submitBtn = document.getElementById('medSubmitBtn');
+  submitBtn.disabled = true;
+  setMedMsg('กำลังบันทึก...', '');
+
+  try {
+    const { error } = await supabaseClient.from('medications').insert([{
+      elderly_id: myId,
+      created_by: myId,
+      name,
+      dosage: dosage || null,
+      meal_times: mealTimes
+    }]);
+
+    if (error) {
+      setMedMsg('เพิ่มยาไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+      return;
+    }
+
+    setMedMsg(`เพิ่ม "${name}" แล้ว`, 'ok');
+    nameInput.value = '';
+    dosageInput.value = '';
+    document.querySelectorAll('input[name="medMeal"]:checked').forEach(cb => cb.checked = false);
+    loadMedications();
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
 (async () => {
   // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
   const { data: { session } } = await supabaseClient.auth.getSession();
@@ -356,6 +611,7 @@ async function handleRemoveMedical(linkId) {
 
   await loadLinks();
   await loadMedicalLinks();
+  await loadMedications();
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'block';
