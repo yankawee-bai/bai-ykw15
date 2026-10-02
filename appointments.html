@@ -1,90 +1,480 @@
--- ============================================================
--- appointments.sql
--- ตารางนัดหมายแพทย์ของผู้สูงอายุแต่ละคน
--- ใช้สิทธิ์ร่วมกับฟังก์ชัน can_manage_elderly() ที่สร้างไว้แล้วใน
--- medications.sql (เจ้าของ หรือผู้ดูแล/บุคลากรที่เชื่อมโยงแบบ
--- accepted จัดการได้หมด)
--- รันใน Supabase SQL editor (ครั้งเดียว ไม่ต้องรันซ้ำ)
--- ต้องรัน caregiver_links.sql + caregiver_links_patch_ui.sql
--- และ medications.sql (เพื่อให้มีฟังก์ชัน can_manage_elderly) มาก่อน
--- ============================================================
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>นัดหมายแพทย์</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Sarabun', sans-serif;
+  background: #eef1f5;
+  min-height: 100vh;
+}
+header {
+  background: #5b6ee8;
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+header h1 { font-size: 18px; margin: 0; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.back, .logout {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.back:hover, .logout:hover { background: rgba(255,255,255,0.3); }
+main { max-width: 900px; margin: 0 auto; padding: 24px; }
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  margin-bottom: 20px;
+}
+.card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
+.card h3 { font-size: 13px; margin: 20px 0 10px; color: #6b7386; text-transform: uppercase; letter-spacing: 0.03em; }
+.loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+.empty { color: #9aa1b0; font-size: 13.5px; padding: 6px 0; }
 
-create table if not exists public.appointments (
-  id uuid primary key default gen_random_uuid(),
-  patient_id uuid not null references public.profiles(id) on delete cascade,
-  created_by uuid not null references public.profiles(id) on delete cascade,
-  title text not null,
-  doctor_name text,
-  location text,
-  appointment_at timestamptz not null,
-  notes text,
-  status text not null default 'scheduled'
-    check (status in ('scheduled', 'completed', 'cancelled')),
-  created_at timestamptz not null default now()
-);
+select#patientSelect {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: white;
+}
 
-comment on table public.appointments is
-  'นัดหมายแพทย์ของผู้สูงอายุแต่ละคน จัดการได้โดยเจ้าตัวหรือผู้ดูแล/บุคลากรที่เชื่อมโยง (accepted) แล้ว';
+.appt-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.appt-form .full { grid-column: 1 / -1; }
+.appt-form input, .appt-form textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.appt-form input:focus, .appt-form textarea:focus { outline: none; border-color: #5b6ee8; }
+.appt-form textarea { resize: vertical; min-height: 60px; }
+.appt-form label { font-size: 12.5px; color: #6b7386; display: block; margin-bottom: 4px; }
+.appt-form button {
+  background: #5b6ee8;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  grid-column: 1 / -1;
+}
+.appt-form button:hover { background: #4557cc; }
+.appt-form button:disabled { background: #c9c9c9; cursor: not-allowed; }
 
-grant select, insert, update, delete on public.appointments to authenticated;
-alter table public.appointments enable row level security;
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.ok { color: #1a8a4a; }
+.msg.err { color: #c0392b; }
 
--- ------------------------------------------------------------
--- trigger กันข้อมูลผิด role (patient_id ต้องเป็น role = elderly)
--- สร้างฟังก์ชันแยกต่างหาก เพราะตารางนี้ใช้ชื่อคอลัมน์ patient_id
--- ไม่ใช่ elderly_id แบบตาราง medications/medication_logs
--- ------------------------------------------------------------
+.appt-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.appt-item:last-child { border-bottom: none; }
+.appt-item .date-box {
+  flex-shrink: 0;
+  width: 56px;
+  text-align: center;
+  background: #eef1fc;
+  border-radius: 10px;
+  padding: 8px 4px;
+}
+.appt-item .date-box .day { font-size: 18px; font-weight: 700; color: #4557cc; line-height: 1; }
+.appt-item .date-box .mon { font-size: 11px; color: #6b7386; margin-top: 2px; }
+.appt-item .info { flex: 1; min-width: 0; }
+.appt-item .title { font-size: 14.5px; font-weight: 600; color: #1c2438; }
+.appt-item .sub { font-size: 12.5px; color: #8a92a3; margin-top: 2px; line-height: 1.6; }
+.appt-item .actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; flex-shrink: 0; }
 
-create or replace function public.enforce_appointment_patient_role()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not exists (
-    select 1 from public.profiles
-    where id = new.patient_id and role = 'elderly'
-  ) then
-    raise exception 'patient_id ต้องเป็นโปรไฟล์ที่มี role = elderly';
-  end if;
-  return new;
-end;
-$$;
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge.scheduled { background: #e3e7fc; color: #4557cc; }
+.badge.completed { background: #d9f2e3; color: #157a4a; }
+.badge.cancelled { background: #f0f2f5; color: #8a92a3; }
 
-drop trigger if exists appointments_patient_role_check on public.appointments;
-create trigger appointments_patient_role_check
-  before insert or update on public.appointments
-  for each row execute function public.enforce_appointment_patient_role();
+.btn-sm {
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-sm.ok { background: #d9f2e3; color: #157a4a; }
+.btn-sm.ok:hover { background: #c3ebd3; }
+.btn-sm.ghost { background: #eef1f5; color: #5a6376; }
+.btn-sm.ghost:hover { background: #e2e6ed; }
+.btn-sm.danger { background: #fbe3e0; color: #b3392a; }
+.btn-sm.danger:hover { background: #f6cec9; }
 
--- ------------------------------------------------------------
--- RLS policies — ใช้ can_manage_elderly() ตัวเดียวกับ medications
--- ------------------------------------------------------------
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab-btn {
+  border: none;
+  background: #eef1f5;
+  color: #5a6376;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tab-btn.active { background: #5b6ee8; color: white; }
+</style>
+</head>
+<body>
 
-drop policy if exists "Can view appointments of linked elderly" on public.appointments;
-create policy "Can view appointments of linked elderly"
-  on public.appointments
-  for select
-  using (public.can_manage_elderly(patient_id));
+<div id="app" style="display:none">
+  <header>
+    <h1>นัดหมายแพทย์</h1>
+    <div class="header-actions">
+      <a class="back" id="backLink" href="elderly-home.html">กลับหน้าหลัก</a>
+      <button class="logout" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+  </header>
 
-drop policy if exists "Can add appointments for linked elderly" on public.appointments;
-create policy "Can add appointments for linked elderly"
-  on public.appointments
-  for insert
-  with check (
-    public.can_manage_elderly(patient_id)
-    and created_by = auth.uid()
-  );
+  <main>
+    <div class="card" id="patientSelectCard" style="display:none">
+      <h2>เลือกผู้ป่วย</h2>
+      <select id="patientSelect"></select>
+    </div>
 
-drop policy if exists "Can update appointments of linked elderly" on public.appointments;
-create policy "Can update appointments of linked elderly"
-  on public.appointments
-  for update
-  using (public.can_manage_elderly(patient_id))
-  with check (public.can_manage_elderly(patient_id));
+    <div class="card">
+      <h2>เพิ่มนัดหมายใหม่</h2>
+      <form class="appt-form" id="apptForm">
+        <div class="full">
+          <label>หัวข้อ / เรื่องที่นัด</label>
+          <input type="text" id="apptTitle" placeholder="เช่น ตรวจตามนัด, ฉีดวัคซีน" required>
+        </div>
+        <div>
+          <label>วันและเวลานัด</label>
+          <input type="datetime-local" id="apptDatetime" required>
+        </div>
+        <div>
+          <label>ชื่อแพทย์ (ถ้ามี)</label>
+          <input type="text" id="apptDoctor" placeholder="เช่น นพ.สมชาย">
+        </div>
+        <div class="full">
+          <label>สถานที่</label>
+          <input type="text" id="apptLocation" placeholder="เช่น รพ.ศิริราช ตึกผู้ป่วยนอก ชั้น 2">
+        </div>
+        <div class="full">
+          <label>หมายเหตุ</label>
+          <textarea id="apptNotes" placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)"></textarea>
+        </div>
+        <button type="submit" id="apptSubmitBtn">บันทึกนัดหมาย</button>
+      </form>
+      <div class="msg" id="apptMsg"></div>
+    </div>
 
-drop policy if exists "Can delete appointments of linked elderly" on public.appointments;
-create policy "Can delete appointments of linked elderly"
-  on public.appointments
-  for delete
-  using (public.can_manage_elderly(patient_id));
+    <div class="card">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="upcoming">นัดที่จะถึง</button>
+        <button class="tab-btn" data-tab="past">ประวัติ</button>
+      </div>
+      <div id="apptList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+  </main>
+</div>
+
+<div class="loading" id="loading">กำลังโหลด...</div>
+
+<script>
+let myId = null;
+let myRole = null;
+let currentPatientId = null;
+let currentTab = 'upcoming';
+
+const DASHBOARD_BY_ROLE = {
+  elderly: "elderly-home.html",
+  caregiver: "caregiver-dashboard.html",
+  medical: "medical-dashboard.html"
+};
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
+
+function setMsg(text, type) {
+  const el = document.getElementById('apptMsg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
+
+function formatThaiDate(dt) {
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const d = new Date(dt);
+  return { day: d.getDate(), mon: months[d.getMonth()] };
+}
+
+function formatThaiDateTime(dt) {
+  const d = new Date(dt);
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543} เวลา ${pad(d.getHours())}:${pad(d.getMinutes())} น.`;
+}
+
+async function loadPatients() {
+  // ผู้สูงอายุ: ดูของตัวเองอย่างเดียว ไม่ต้องเลือก
+  if (myRole === 'elderly') {
+    currentPatientId = myId;
+    return;
+  }
+
+  const patientSelectCard = document.getElementById('patientSelectCard');
+  const select = document.getElementById('patientSelect');
+  let patients = [];
+
+  if (myRole === 'caregiver') {
+    const { data } = await supabaseClient
+      .from('caregiver_links')
+      .select('elderly_id, profiles!caregiver_links_elderly_id_fkey(full_name)')
+      .eq('caregiver_id', myId)
+      .eq('status', 'accepted');
+    patients = (data || []).map(l => ({ id: l.elderly_id, name: l.profiles ? l.profiles.full_name : l.elderly_id }));
+  } else if (myRole === 'medical') {
+    const { data } = await supabaseClient
+      .from('medical_links')
+      .select('patient_id, profiles!medical_links_patient_id_fkey(full_name)')
+      .eq('medical_id', myId)
+      .eq('status', 'accepted');
+    patients = (data || []).map(l => ({ id: l.patient_id, name: l.profiles ? l.profiles.full_name : l.patient_id }));
+  }
+
+  if (patients.length === 0) {
+    patientSelectCard.style.display = 'block';
+    select.innerHTML = '<option value="">ไม่มีผู้ป่วยที่เชื่อมโยงอยู่</option>';
+    currentPatientId = null;
+    return;
+  }
+
+  patientSelectCard.style.display = 'block';
+  select.innerHTML = patients.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  currentPatientId = patients[0].id;
+
+  select.addEventListener('change', () => {
+    currentPatientId = select.value;
+    loadAppointments();
+  });
+}
+
+async function loadAppointments() {
+  const listEl = document.getElementById('apptList');
+
+  if (!currentPatientId) {
+    listEl.innerHTML = '<div class="empty">เลือกผู้ป่วยก่อนเพื่อดูนัดหมาย</div>';
+    return;
+  }
+
+  const { data: appts, error } = await supabaseClient
+    .from('appointments')
+    .select('id, title, doctor_name, location, appointment_at, notes, status')
+    .eq('patient_id', currentPatientId)
+    .order('appointment_at', { ascending: currentTab === 'upcoming' });
+
+  if (error) {
+    listEl.innerHTML = '<div class="empty">โหลดนัดหมายไม่สำเร็จ</div>';
+    return;
+  }
+
+  const now = new Date();
+  const filtered = (appts || []).filter(a => {
+    const isPast = new Date(a.appointment_at) < now || a.status !== 'scheduled';
+    return currentTab === 'upcoming' ? !isPast : isPast;
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = currentTab === 'upcoming'
+      ? '<div class="empty">ไม่มีนัดหมายที่จะถึง</div>'
+      : '<div class="empty">ยังไม่มีประวัตินัดหมาย</div>';
+    return;
+  }
+
+  listEl.innerHTML = filtered.map(a => {
+    const { day, mon } = formatThaiDate(a.appointment_at);
+    const badgeText = { scheduled: 'นัดไว้', completed: 'เสร็จแล้ว', cancelled: 'ยกเลิกแล้ว' }[a.status] || a.status;
+    return `
+      <div class="appt-item">
+        <div class="date-box">
+          <div class="day">${day}</div>
+          <div class="mon">${mon}</div>
+        </div>
+        <div class="info">
+          <div class="title">${escapeHtml(a.title)}</div>
+          <div class="sub">
+            ${formatThaiDateTime(a.appointment_at)}<br>
+            ${a.doctor_name ? escapeHtml(a.doctor_name) + ' · ' : ''}${escapeHtml(a.location || '')}
+            ${a.notes ? '<br>' + escapeHtml(a.notes) : ''}
+          </div>
+        </div>
+        <div class="actions">
+          <span class="badge ${a.status}">${badgeText}</span>
+          ${a.status === 'scheduled' ? `
+            <button class="btn-sm ok" data-complete="${a.id}">เสร็จแล้ว</button>
+            <button class="btn-sm ghost" data-cancel="${a.id}">ยกเลิกนัด</button>
+          ` : ''}
+          <button class="btn-sm danger" data-delete="${a.id}">ลบ</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-complete]').forEach(btn => {
+    btn.addEventListener('click', () => updateStatus(btn.getAttribute('data-complete'), 'completed'));
+  });
+  document.querySelectorAll('[data-cancel]').forEach(btn => {
+    btn.addEventListener('click', () => updateStatus(btn.getAttribute('data-cancel'), 'cancelled'));
+  });
+  document.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => deleteAppointment(btn.getAttribute('data-delete')));
+  });
+}
+
+async function updateStatus(id, status) {
+  const { error } = await supabaseClient.from('appointments').update({ status }).eq('id', id);
+  if (error) return;
+  loadAppointments();
+}
+
+async function deleteAppointment(id) {
+  if (!confirm('ลบนัดหมายนี้หรือไม่?')) return;
+  const { error } = await supabaseClient.from('appointments').delete().eq('id', id);
+  if (error) return;
+  loadAppointments();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTab = btn.getAttribute('data-tab');
+    loadAppointments();
+  });
+});
+
+document.getElementById('apptForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (!currentPatientId) {
+    setMsg('ไม่มีผู้ป่วยให้เพิ่มนัดหมาย', 'err');
+    return;
+  }
+
+  const titleInput = document.getElementById('apptTitle');
+  const dtInput = document.getElementById('apptDatetime');
+  const doctorInput = document.getElementById('apptDoctor');
+  const locationInput = document.getElementById('apptLocation');
+  const notesInput = document.getElementById('apptNotes');
+
+  const title = titleInput.value.trim();
+  const dt = dtInput.value;
+  if (!title || !dt) return;
+
+  const submitBtn = document.getElementById('apptSubmitBtn');
+  submitBtn.disabled = true;
+  setMsg('กำลังบันทึก...', '');
+
+  try {
+    const { error } = await supabaseClient.from('appointments').insert([{
+      patient_id: currentPatientId,
+      created_by: myId,
+      title,
+      doctor_name: doctorInput.value.trim() || null,
+      location: locationInput.value.trim() || null,
+      appointment_at: new Date(dt).toISOString(),
+      notes: notesInput.value.trim() || null
+    }]);
+
+    if (error) {
+      setMsg('บันทึกนัดหมายไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+      return;
+    }
+
+    setMsg('บันทึกนัดหมายแล้ว', 'ok');
+    titleInput.value = '';
+    dtInput.value = '';
+    doctorInput.value = '';
+    locationInput.value = '';
+    notesInput.value = '';
+
+    document.querySelector('.tab-btn[data-tab="upcoming"]').click();
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('full_name, role')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!profile) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  myId = session.user.id;
+  myRole = profile.role;
+
+  document.getElementById('backLink').href = DASHBOARD_BY_ROLE[myRole] || "login.html";
+
+  await loadPatients();
+  await loadAppointments();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.replace("login.html");
+});
+</script>
+
+</body>
+</html>
