@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>สัญญาณชีพ</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Sarabun', sans-serif;
+  background: #eef1f5;
+  min-height: 100vh;
+}
+header {
+  background: #e0527a;
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+header h1 { font-size: 18px; margin: 0; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.back, .logout {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.back:hover, .logout:hover { background: rgba(255,255,255,0.3); }
+main { max-width: 900px; margin: 0 auto; padding: 24px; }
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+  margin-bottom: 20px;
+}
+.card h2 { font-size: 16px; margin: 0 0 12px; color: #1c2438; }
+.loading { text-align: center; padding: 60px 20px; color: #6b7386; }
+.empty { color: #9aa1b0; font-size: 13.5px; padding: 6px 0; }
+.disclaimer {
+  font-size: 12px;
+  color: #8a92a3;
+  background: #f7f3f5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 14px;
+  line-height: 1.6;
+}
+
+select#patientSelect {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+  background: white;
+}
+
+.vital-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vital-form .full { grid-column: 1 / -1; }
+.vital-form .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vital-form input, .vital-form textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1px solid #dfe3ea;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: inherit;
+}
+.vital-form input:focus, .vital-form textarea:focus { outline: none; border-color: #e0527a; }
+.vital-form textarea { resize: vertical; min-height: 50px; }
+.vital-form label { font-size: 12.5px; color: #6b7386; display: block; margin-bottom: 4px; }
+.vital-form button {
+  background: #e0527a;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  grid-column: 1 / -1;
+}
+.vital-form button:hover { background: #c43f64; }
+.vital-form button:disabled { background: #c9c9c9; cursor: not-allowed; }
+
+.msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+.msg.ok { color: #1a8a4a; }
+.msg.err { color: #c0392b; }
+
+.vital-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f2f5;
+}
+.vital-item:last-child { border-bottom: none; }
+.vital-item .date {
+  flex-shrink: 0;
+  width: 130px;
+  font-size: 12.5px;
+  color: #6b7386;
+  line-height: 1.5;
+}
+.vital-item .readings {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.reading-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f7f8fa;
+  border-radius: 10px;
+  padding: 6px 14px;
+  min-width: 70px;
+}
+.reading-chip.flag-high { background: #fde6e6; }
+.reading-chip.flag-low { background: #e6eefc; }
+.reading-chip .val { font-size: 16px; font-weight: 700; color: #1c2438; }
+.reading-chip .lbl { font-size: 10.5px; color: #8a92a3; margin-top: 2px; }
+.vital-item .notes { font-size: 12.5px; color: #8a92a3; margin-top: 6px; width: 100%; }
+.vital-item .actions { flex-shrink: 0; }
+
+.btn-sm {
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-sm.danger { background: #fbe3e0; color: #b3392a; }
+.btn-sm.danger:hover { background: #f6cec9; }
+</style>
+</head>
+<body>
+
+<div id="app" style="display:none">
+  <header>
+    <h1>สัญญาณชีพ</h1>
+    <div class="header-actions">
+      <a class="back" id="backLink" href="elderly-home.html">กลับหน้าหลัก</a>
+      <button class="logout" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="card" id="patientSelectCard" style="display:none">
+      <h2>เลือกผู้ป่วย</h2>
+      <select id="patientSelect"></select>
+    </div>
+
+    <div class="card">
+      <h2>บันทึกค่าใหม่</h2>
+      <form class="vital-form" id="vitalForm">
+        <div class="full">
+          <label>วันและเวลาที่วัด</label>
+          <input type="datetime-local" id="vMeasuredAt">
+        </div>
+        <div class="pair full">
+          <div>
+            <label>ความดันตัวบน (ซิสโตลิก)</label>
+            <input type="number" id="vSystolic" placeholder="เช่น 120">
+          </div>
+          <div>
+            <label>ความดันตัวล่าง (ไดแอสโตลิก)</label>
+            <input type="number" id="vDiastolic" placeholder="เช่น 80">
+          </div>
+        </div>
+        <div>
+          <label>ชีพจร (ครั้ง/นาที)</label>
+          <input type="number" id="vPulse" placeholder="เช่น 72">
+        </div>
+        <div>
+          <label>น้ำตาลในเลือด (mg/dL)</label>
+          <input type="number" step="0.1" id="vBloodSugar" placeholder="เช่น 95">
+        </div>
+        <div class="full">
+          <label>หมายเหตุ</label>
+          <textarea id="vNotes" placeholder="เช่น วัดหลังตื่นนอน, วัดก่อนกินยา"></textarea>
+        </div>
+        <button type="submit" id="vSubmitBtn">บันทึกค่า</button>
+      </form>
+      <div class="msg" id="vMsg"></div>
+      <div class="disclaimer">
+        ตัวเลขที่ไฮไลต์สีเป็นแค่เกณฑ์คร่าวๆ สำหรับสังเกตเบื้องต้นเท่านั้น ไม่ใช่คำวินิจฉัยทางการแพทย์
+        หากมีค่าผิดปกติต่อเนื่องควรปรึกษาแพทย์โดยตรง
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>ประวัติการวัด</h2>
+      <div id="vitalList"><div class="empty">กำลังโหลด...</div></div>
+    </div>
+  </main>
+</div>
+
+<div class="loading" id="loading">กำลังโหลด...</div>
+
+<script>
+let myId = null;
+let myRole = null;
+let currentPatientId = null;
+
+const DASHBOARD_BY_ROLE = {
+  elderly: "elderly-home.html",
+  caregiver: "caregiver-dashboard.html",
+  medical: "medical-dashboard.html"
+};
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : str;
+  return div.innerHTML;
+}
+
+function setMsg(text, type) {
+  const el = document.getElementById('vMsg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
+
+function formatThaiDateTime(dt) {
+  const d = new Date(dt);
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear() + 543}<br>${pad(d.getHours())}:${pad(d.getMinutes())} น.`;
+}
+
+function bpFlag(systolic, diastolic) {
+  if (systolic == null && diastolic == null) return '';
+  if ((systolic != null && systolic >= 140) || (diastolic != null && diastolic >= 90)) return 'flag-high';
+  if ((systolic != null && systolic < 90) || (diastolic != null && diastolic < 60)) return 'flag-low';
+  return '';
+}
+
+function pulseFlag(pulse) {
+  if (pulse == null) return '';
+  if (pulse > 100) return 'flag-high';
+  if (pulse < 60) return 'flag-low';
+  return '';
+}
+
+function sugarFlag(sugar) {
+  if (sugar == null) return '';
+  if (sugar >= 180) return 'flag-high';
+  if (sugar < 70) return 'flag-low';
+  return '';
+}
+
+async function loadPatients() {
+  if (myRole === 'elderly') {
+    currentPatientId = myId;
+    return;
+  }
+
+  const patientSelectCard = document.getElementById('patientSelectCard');
+  const select = document.getElementById('patientSelect');
+  let patients = [];
+
+  if (myRole === 'caregiver') {
+    const { data } = await supabaseClient
+      .from('caregiver_links')
+      .select('elderly_id, profiles!caregiver_links_elderly_id_fkey(full_name)')
+      .eq('caregiver_id', myId)
+      .eq('status', 'accepted');
+    patients = (data || []).map(l => ({ id: l.elderly_id, name: l.profiles ? l.profiles.full_name : l.elderly_id }));
+  } else if (myRole === 'medical') {
+    const { data } = await supabaseClient
+      .from('medical_links')
+      .select('patient_id, profiles!medical_links_patient_id_fkey(full_name)')
+      .eq('medical_id', myId)
+      .eq('status', 'accepted');
+    patients = (data || []).map(l => ({ id: l.patient_id, name: l.profiles ? l.profiles.full_name : l.patient_id }));
+  }
+
+  patientSelectCard.style.display = 'block';
+
+  if (patients.length === 0) {
+    select.innerHTML = '<option value="">ไม่มีผู้ป่วยที่เชื่อมโยงอยู่</option>';
+    currentPatientId = null;
+    return;
+  }
+
+  select.innerHTML = patients.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+  currentPatientId = patients[0].id;
+
+  select.addEventListener('change', () => {
+    currentPatientId = select.value;
+    loadVitals();
+  });
+}
+
+async function loadVitals() {
+  const listEl = document.getElementById('vitalList');
+
+  if (!currentPatientId) {
+    listEl.innerHTML = '<div class="empty">เลือกผู้ป่วยก่อนเพื่อดูประวัติ</div>';
+    return;
+  }
+
+  const { data: vitals, error } = await supabaseClient
+    .from('vitals')
+    .select('id, measured_at, systolic, diastolic, pulse, blood_sugar, notes')
+    .eq('patient_id', currentPatientId)
+    .order('measured_at', { ascending: false });
+
+  if (error) {
+    listEl.innerHTML = '<div class="empty">โหลดประวัติไม่สำเร็จ</div>';
+    return;
+  }
+
+  if (!vitals || vitals.length === 0) {
+    listEl.innerHTML = '<div class="empty">ยังไม่มีประวัติการวัด</div>';
+    return;
+  }
+
+  listEl.innerHTML = vitals.map(v => {
+    const chips = [];
+    if (v.systolic != null || v.diastolic != null) {
+      chips.push(`
+        <div class="reading-chip ${bpFlag(v.systolic, v.diastolic)}">
+          <div class="val">${v.systolic ?? '-'}/${v.diastolic ?? '-'}</div>
+          <div class="lbl">ความดัน</div>
+        </div>
+      `);
+    }
+    if (v.pulse != null) {
+      chips.push(`
+        <div class="reading-chip ${pulseFlag(v.pulse)}">
+          <div class="val">${v.pulse}</div>
+          <div class="lbl">ชีพจร</div>
+        </div>
+      `);
+    }
+    if (v.blood_sugar != null) {
+      chips.push(`
+        <div class="reading-chip ${sugarFlag(v.blood_sugar)}">
+          <div class="val">${v.blood_sugar}</div>
+          <div class="lbl">น้ำตาล</div>
+        </div>
+      `);
+    }
+
+    return `
+      <div class="vital-item">
+        <div class="date">${formatThaiDateTime(v.measured_at)}</div>
+        <div class="readings">
+          ${chips.join('')}
+          ${v.notes ? `<div class="notes">${escapeHtml(v.notes)}</div>` : ''}
+        </div>
+        <div class="actions">
+          <button class="btn-sm danger" data-delete="${v.id}">ลบ</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => deleteVital(btn.getAttribute('data-delete')));
+  });
+}
+
+async function deleteVital(id) {
+  if (!confirm('ลบรายการนี้หรือไม่?')) return;
+  const { error } = await supabaseClient.from('vitals').delete().eq('id', id);
+  if (error) return;
+  loadVitals();
+}
+
+document.getElementById('vitalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  if (!currentPatientId) {
+    setMsg('ไม่มีผู้ป่วยให้บันทึกค่า', 'err');
+    return;
+  }
+
+  const measuredAtInput = document.getElementById('vMeasuredAt');
+  const systolicInput = document.getElementById('vSystolic');
+  const diastolicInput = document.getElementById('vDiastolic');
+  const pulseInput = document.getElementById('vPulse');
+  const sugarInput = document.getElementById('vBloodSugar');
+  const notesInput = document.getElementById('vNotes');
+
+  const systolic = systolicInput.value ? parseInt(systolicInput.value, 10) : null;
+  const diastolic = diastolicInput.value ? parseInt(diastolicInput.value, 10) : null;
+  const pulse = pulseInput.value ? parseInt(pulseInput.value, 10) : null;
+  const bloodSugar = sugarInput.value ? parseFloat(sugarInput.value) : null;
+
+  if (systolic == null && diastolic == null && pulse == null && bloodSugar == null) {
+    setMsg('กรอกอย่างน้อย 1 ค่า', 'err');
+    return;
+  }
+
+  const submitBtn = document.getElementById('vSubmitBtn');
+  submitBtn.disabled = true;
+  setMsg('กำลังบันทึก...', '');
+
+  try {
+    const payload = {
+      patient_id: currentPatientId,
+      recorded_by: myId,
+      systolic,
+      diastolic,
+      pulse,
+      blood_sugar: bloodSugar,
+      notes: notesInput.value.trim() || null
+    };
+    if (measuredAtInput.value) {
+      payload.measured_at = new Date(measuredAtInput.value).toISOString();
+    }
+
+    const { error } = await supabaseClient.from('vitals').insert([payload]);
+
+    if (error) {
+      setMsg('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+      return;
+    }
+
+    setMsg('บันทึกค่าแล้ว', 'ok');
+    measuredAtInput.value = '';
+    systolicInput.value = '';
+    diastolicInput.value = '';
+    pulseInput.value = '';
+    sugarInput.value = '';
+    notesInput.value = '';
+    loadVitals();
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+(async () => {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('full_name, role')
+    .eq('id', session.user.id)
+    .single();
+
+  if (!profile) {
+    window.location.replace("login.html");
+    return;
+  }
+
+  myId = session.user.id;
+  myRole = profile.role;
+
+  document.getElementById('backLink').href = DASHBOARD_BY_ROLE[myRole] || "login.html";
+
+  await loadPatients();
+  await loadVitals();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+})();
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await supabaseClient.auth.signOut();
+  window.location.replace("login.html");
+});
+</script>
+
+</body>
+</html>
