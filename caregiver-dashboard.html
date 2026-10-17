@@ -79,6 +79,51 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
 .msg.ok { color: #1a8a4a; }
 .msg.err { color: #c0392b; }
 
+.help-alert { border: 2px solid #e8574b; background: #fff7f6; }
+.help-alert h2 { color: #b3261a; }
+.help-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 0;
+  border-bottom: 1px solid #f3d3cf;
+}
+.help-item:last-child { border-bottom: none; }
+.help-item .who { font-size: 16px; font-weight: 800; color: #1c2438; }
+.help-item .when { font-size: 12.5px; color: #8a92a3; margin-top: 2px; }
+.help-item .state { font-size: 13px; font-weight: 700; margin-top: 4px; }
+.help-item .state.active { color: #b3261a; }
+.help-item .state.ack { color: #146c3c; }
+.help-item .actions { display: flex; gap: 8px; }
+.btn-help {
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-help.ack { background: #d93025; color: white; }
+.btn-help.ack:hover { background: #b9251b; }
+.btn-help.done { background: #e3f4ea; color: #146c3c; }
+.btn-help.done:hover { background: #cdebd9; }
+.notif-btn {
+  background: #eef1f5;
+  color: #1c2438;
+  border: none;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 10px;
+}
+.notif-btn:hover { background: #e2e6ed; }
+
 .empty { color: #9aa1b0; font-size: 13.5px; padding: 6px 0; }
 
 .link-item {
@@ -128,6 +173,12 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
   </header>
 
   <main>
+    <div class="card help-alert" id="helpAlertCard" style="display:none">
+      <h2>ผู้สูงอายุขอความช่วยเหลือ</h2>
+      <div id="helpAlertList"></div>
+      <div class="msg err" id="helpAlertMsg"></div>
+    </div>
+
     <div class="card">
       <h2>ข้อมูลผู้ใช้</h2>
       <div class="row"><div class="k">ชื่อ-นามสกุล</div><div class="v" id="fullName">-</div></div>
@@ -161,10 +212,18 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
     </div>
 
     <div class="card">
+      <h2>การแจ้งเตือนขอความช่วยเหลือ</h2>
+      <div class="todo">
+        หน้านี้เช็คคำขอทุก 10 วินาทีและส่งเสียงเตือนเมื่อมีคำขอใหม่ แต่จะทำงานเฉพาะตอนเปิดหน้านี้ค้างไว้เท่านั้น
+        (ปิดหน้าเว็บหรือปิดเครื่องแล้วจะไม่ได้รับแจ้ง)
+      </div>
+      <button class="notif-btn" id="notifBtn" style="display:none">เปิดการแจ้งเตือนบนเบราว์เซอร์</button>
+    </div>
+
+    <div class="card">
       <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
       <div class="todo">
-        • บันทึกการดูแลประจำวัน<br>
-        • แจ้งเตือนเมื่อผู้สูงอายุกดขอความช่วยเหลือ
+        • บันทึกการดูแลประจำวัน
       </div>
     </div>
   </main>
@@ -319,6 +378,139 @@ document.getElementById('linkForm').addEventListener('submit', async (e) => {
   }
 });
 
+// ---------- แจ้งเตือนขอความช่วยเหลือ ----------
+
+const ORIGINAL_TITLE = document.title;
+let seenActiveIds = new Set();
+let lastHelpKey = null;
+
+function fmtClock(dt) {
+  const d = new Date(dt);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} น.`;
+}
+
+function beep() {
+  // เบราว์เซอร์อาจบล็อกเสียงถ้ายังไม่เคยคลิกอะไรในหน้านี้ — ไม่เป็นไร แค่ข้ามไป
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    [0, 0.35, 0.7].forEach(offset => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.15;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + offset);
+      osc.stop(ctx.currentTime + offset + 0.2);
+    });
+  } catch (_) {}
+}
+
+function browserNotify(names) {
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('ขอความช่วยเหลือ', { body: names.join(', ') + ' กดขอความช่วยเหลือ' });
+    }
+  } catch (_) {}
+}
+
+async function loadHelpAlerts() {
+  const card = document.getElementById('helpAlertCard');
+  const list = document.getElementById('helpAlertList');
+
+  // RLS กรองให้เห็นเฉพาะผู้สูงอายุที่เชื่อมโยง (accepted) กับเราอยู่แล้ว
+  const { data, error } = await supabaseClient
+    .from('help_requests')
+    .select('id, status, created_at, acknowledged_by, acknowledged_at, profiles!help_requests_elderly_id_fkey(full_name)')
+    .in('status', ['active', 'acknowledged'])
+    .order('created_at', { ascending: true });
+
+  if (error) return; // โพลรอบหน้าจะลองใหม่เอง
+
+  const open = data || [];
+  const activeOnes = open.filter(r => r.status === 'active');
+
+  // คำขอใหม่ที่ยังไม่เคยเห็น -> เสียง + แจ้งเตือนเบราว์เซอร์
+  const fresh = activeOnes.filter(r => !seenActiveIds.has(r.id));
+  if (fresh.length > 0) {
+    beep();
+    browserNotify(fresh.map(r => (r.profiles && r.profiles.full_name) || 'ผู้สูงอายุ'));
+  }
+  open.forEach(r => seenActiveIds.add(r.id));
+
+  document.title = activeOnes.length > 0
+    ? `🚨 (${activeOnes.length}) ขอความช่วยเหลือ`
+    : ORIGINAL_TITLE;
+
+  if (open.length === 0) {
+    lastHelpKey = null;
+    card.style.display = 'none';
+    list.innerHTML = '';
+    return;
+  }
+
+  // วาดใหม่เฉพาะเมื่อมีอะไรเปลี่ยน กันปุ่มถูกแทนที่กลางจังหวะที่กำลังกด
+  const key = open.map(r => r.id + ':' + r.status).join('|');
+  card.style.display = 'block';
+  if (key === lastHelpKey) return;
+  lastHelpKey = key;
+
+  list.innerHTML = open.map(r => {
+    const name = escapeHtml((r.profiles && r.profiles.full_name) || 'ผู้สูงอายุ');
+    const isMine = r.acknowledged_by === myId;
+    const state = r.status === 'active'
+      ? '<div class="state active">ยังไม่มีใครรับทราบ</div>'
+      : `<div class="state ack">${isMine ? 'คุณ' : 'ผู้ดูแลอีกคน'}รับทราบแล้ว (${r.acknowledged_at ? fmtClock(r.acknowledged_at) : ''})</div>`;
+    return `
+      <div class="help-item">
+        <div>
+          <div class="who">${name} ขอความช่วยเหลือ</div>
+          <div class="when">ตั้งแต่ ${fmtClock(r.created_at)}</div>
+          ${state}
+        </div>
+        <div class="actions">
+          ${r.status === 'active' ? `<button class="btn-help ack" data-help-ack="${r.id}">รับทราบ</button>` : ''}
+          <button class="btn-help done" data-help-done="${r.id}">ช่วยเหลือเรียบร้อย</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('[data-help-ack]').forEach(btn => {
+    btn.addEventListener('click', () => updateHelp(btn.getAttribute('data-help-ack'), 'acknowledged'));
+  });
+  list.querySelectorAll('[data-help-done]').forEach(btn => {
+    btn.addEventListener('click', () => updateHelp(btn.getAttribute('data-help-done'), 'resolved'));
+  });
+}
+
+async function updateHelp(id, status) {
+  const msg = document.getElementById('helpAlertMsg');
+  msg.textContent = '';
+  const { error } = await supabaseClient
+    .from('help_requests')
+    .update({ status })
+    .eq('id', id);
+  if (error) {
+    msg.textContent = 'ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง';
+    return;
+  }
+  lastHelpKey = null;
+  loadHelpAlerts();
+}
+
+function setupNotifButton() {
+  const btn = document.getElementById('notifBtn');
+  if (!btn || !('Notification' in window) || Notification.permission !== 'default') return;
+  btn.style.display = 'inline-block';
+  btn.addEventListener('click', async () => {
+    try { await Notification.requestPermission(); } catch (_) {}
+    btn.style.display = 'none';
+  });
+}
+
 (async () => {
   // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
   const { data: { session } } = await supabaseClient.auth.getSession();
@@ -351,6 +543,10 @@ document.getElementById('linkForm').addEventListener('submit', async (e) => {
   document.getElementById('role').textContent = "ผู้ดูแล";
 
   await loadLinks();
+  setupNotifButton();
+  await loadHelpAlerts();
+  // เช็คคำขอใหม่ทุก 10 วินาที
+  setInterval(loadHelpAlerts, 10000);
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'block';
