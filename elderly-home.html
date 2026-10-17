@@ -84,6 +84,44 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
 .msg.err { color: #c0392b; }
 .msg.ok { color: #1a8a4a; }
 
+.help-card { border: 2px solid #f3c6c0; }
+.help-btn {
+  display: block;
+  width: 100%;
+  background: #d93025;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  padding: 26px 20px;
+  font-size: 22px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(217, 48, 37, 0.3);
+}
+.help-btn:hover { background: #b9251b; }
+.help-btn:disabled { background: #c9c9c9; box-shadow: none; cursor: not-allowed; }
+.help-status {
+  border-radius: 12px;
+  padding: 16px 18px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.help-status.active { background: #fdeceb; color: #8c1d14; }
+.help-status.ack { background: #e3f4ea; color: #146c3c; }
+.help-status .big { font-size: 18px; font-weight: 800; }
+.help-actions { margin-top: 12px; }
+.help-note { font-size: 12.5px; color: #8a92a3; margin-top: 12px; line-height: 1.7; }
+.help-warn {
+  background: #fff4dc;
+  color: #7a5200;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+
 .med-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
 .med-form input[type="text"] {
   padding: 11px 14px;
@@ -161,6 +199,16 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
   </header>
 
   <main>
+    <div class="card help-card">
+      <h2>ขอความช่วยเหลือ</h2>
+      <div id="helpArea"><div class="empty">กำลังโหลด...</div></div>
+      <div class="msg" id="helpMsg"></div>
+      <div class="help-note">
+        ปุ่มนี้แจ้งเฉพาะผู้ดูแลที่เชื่อมโยงกับคุณในระบบ และผู้ดูแลจะเห็นเมื่อเปิดหน้าเว็บนี้อยู่เท่านั้น
+        ถ้าเป็นเหตุฉุกเฉินจริง ให้โทร <b>1669</b> (หน่วยแพทย์ฉุกเฉิน) ทันที
+      </div>
+    </div>
+
     <div class="card">
       <h2>ข้อมูลผู้ใช้</h2>
       <div class="row"><div class="k">ชื่อ-นามสกุล</div><div class="v" id="fullName">-</div></div>
@@ -224,12 +272,6 @@ main { max-width: 900px; margin: 0 auto; padding: 24px; }
       <a href="vitals.html" style="display:inline-block;background:#e0527a;color:white;text-decoration:none;padding:11px 20px;border-radius:10px;font-size:14px;font-weight:700;">บันทึก/ดูสัญญาณชีพ</a>
     </div>
 
-    <div class="card">
-      <h2>ฟีเจอร์ที่จะเพิ่มในเฟสถัดไป</h2>
-      <div class="todo">
-        • ปุ่มขอความช่วยเหลือฉุกเฉิน
-      </div>
-    </div>
   </main>
 </div>
 
@@ -586,6 +628,117 @@ document.getElementById('medForm').addEventListener('submit', async (e) => {
   }
 });
 
+// ---------- ปุ่มขอความช่วยเหลือ ----------
+
+function setHelpMsg(text, type) {
+  const el = document.getElementById('helpMsg');
+  el.textContent = text || '';
+  el.className = 'msg' + (type ? ' ' + type : '');
+}
+
+function fmtClock(dt) {
+  const d = new Date(dt);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} น.`;
+}
+
+let lastHelpKey = null;
+
+async function loadHelpRequest() {
+  const area = document.getElementById('helpArea');
+
+  const { data: open, error } = await supabaseClient
+    .from('help_requests')
+    .select('id, status, created_at, acknowledged_at, profiles!help_requests_acknowledged_by_fkey(full_name)')
+    .eq('elderly_id', myId)
+    .in('status', ['active', 'acknowledged'])
+    .maybeSingle();
+
+  if (error) {
+    lastHelpKey = null;
+    area.innerHTML = '<div class="empty">โหลดสถานะไม่สำเร็จ ถ้าฉุกเฉินให้โทร 1669</div>';
+    return;
+  }
+
+  let html, key;
+  if (open && open.status === 'active') {
+    key = 'active:' + open.id;
+    html = `
+      <div class="help-status active">
+        <div class="big">ส่งคำขอความช่วยเหลือแล้ว (${fmtClock(open.created_at)})</div>
+        รอผู้ดูแลรับทราบ ...
+      </div>
+      <div class="help-actions">
+        <button class="btn-sm decline" id="helpResolveBtn">ยกเลิกคำขอ (กดผิด / ไม่ต้องการแล้ว)</button>
+      </div>`;
+  } else if (open && open.status === 'acknowledged') {
+    const who = open.profiles && open.profiles.full_name ? open.profiles.full_name : 'ผู้ดูแล';
+    key = 'ack:' + open.id;
+    html = `
+      <div class="help-status ack">
+        <div class="big">${escapeHtml(who)} รับทราบแล้ว (${open.acknowledged_at ? fmtClock(open.acknowledged_at) : ''})</div>
+        กำลังมาช่วยเหลือ
+      </div>
+      <div class="help-actions">
+        <button class="btn-sm accept" id="helpResolveBtn">ได้รับความช่วยเหลือแล้ว</button>
+      </div>`;
+  } else {
+    // ไม่มีคำขอค้างอยู่ — เช็คก่อนว่ามีผู้ดูแลที่เชื่อมโยงอยู่ไหม ไม่งั้นกดไปก็ไม่มีใครเห็น
+    const { count } = await supabaseClient
+      .from('caregiver_links')
+      .select('id', { count: 'exact', head: true })
+      .eq('elderly_id', myId)
+      .eq('status', 'accepted');
+
+    key = 'none:' + (count === 0 ? 'nolink' : 'linked');
+    html = `
+      ${count === 0 ? '<div class="help-warn">ตอนนี้ยังไม่มีผู้ดูแลที่เชื่อมโยงกับคุณ ถ้ากดปุ่มจะไม่มีใครได้รับแจ้ง กรุณาโทร 1669 หรือเชื่อมโยงผู้ดูแลก่อน</div>' : ''}
+      <button class="help-btn" id="helpBtn">กดที่นี่เมื่อต้องการความช่วยเหลือ</button>`;
+  }
+
+  // วาดใหม่เฉพาะเมื่อสถานะเปลี่ยน กันปุ่มถูกแทนที่กลางจังหวะที่กำลังกด
+  if (key === lastHelpKey) return;
+  lastHelpKey = key;
+  area.innerHTML = html;
+
+  const helpBtn = document.getElementById('helpBtn');
+  if (helpBtn) helpBtn.addEventListener('click', sendHelpRequest);
+  const resolveBtn = document.getElementById('helpResolveBtn');
+  if (resolveBtn) resolveBtn.addEventListener('click', () => resolveHelpRequest(open.id));
+}
+
+async function sendHelpRequest() {
+  if (!confirm('ส่งแจ้งขอความช่วยเหลือถึงผู้ดูแลของคุณหรือไม่?')) return;
+  const btn = document.getElementById('helpBtn');
+  if (btn) btn.disabled = true;
+  setHelpMsg('', '');
+
+  const { error } = await supabaseClient
+    .from('help_requests')
+    .insert([{ elderly_id: myId }]);
+
+  // 23505 = มีคำขอที่เปิดอยู่แล้ว (กดซ้ำ/อีกเครื่องกดไปแล้ว) แค่โหลดสถานะใหม่
+  if (error && error.code !== '23505') {
+    setHelpMsg('ส่งไม่สำเร็จ ลองอีกครั้ง หรือโทร 1669 ถ้าฉุกเฉิน', 'err');
+    if (btn) btn.disabled = false;
+    return;
+  }
+  loadHelpRequest();
+}
+
+async function resolveHelpRequest(id) {
+  setHelpMsg('', '');
+  const { error } = await supabaseClient
+    .from('help_requests')
+    .update({ status: 'resolved' })
+    .eq('id', id);
+  if (error) {
+    setHelpMsg('ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง', 'err');
+    return;
+  }
+  loadHelpRequest();
+}
+
 (async () => {
   // 1) ตรวจว่ามี session หรือยัง ถ้าไม่มีเด้งกลับหน้า login
   const { data: { session } } = await supabaseClient.auth.getSession();
@@ -620,6 +773,9 @@ document.getElementById('medForm').addEventListener('submit', async (e) => {
   await loadLinks();
   await loadMedicalLinks();
   await loadMedications();
+  await loadHelpRequest();
+  // อัปเดตสถานะ (เช่น ผู้ดูแลรับทราบแล้ว) ทุก 10 วินาที
+  setInterval(loadHelpRequest, 10000);
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'block';
